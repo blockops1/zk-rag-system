@@ -1,0 +1,23 @@
+# Military Manuals — Military Doctrine RAG API
+
+> Semantic search over 128+ US military field manuals and technical publications. Public domain documents. Free API key available on request.
+
+## Base URL
+https://militarymanuals.ai
+
+## Authentication
+API Key: Include `Authorization: Bearer <key>` header.
+
+## Endpoints
+- GET /api/collections — List collections and document counts. No auth required.
+- GET /api/manifest — Machine-readable API description. No auth required.
+- POST /api/query — Semantic search. Requires API key. Body: {"query": str, "top_k": int (default 5)}
+
+## Collections
+- army-docs: 128+ US military field manuals, technical manuals, ATPs, and training circulars.
+
+## Example
+curl -X POST https://militarymanuals.ai/api/query \
+  -H 'Authorization: Bearer YOUR_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "infantry platoon attack formation", "top_k": 5}'

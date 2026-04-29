@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Military Manuals — Military Doctrine RAG API</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      line-height: 1.6;
+      padding: 20px;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { color: #fff; margin-bottom: 10px; }
+    h2 { color: #fff; margin: 30px 0 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+    .hero { background: #16213e; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    .hero p { color: #b0b0b0; }
+    table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #333; }
+    th { background: #16213e; color: #fff; }
+    tr:hover { background: #1f1f3a; }
+    code { background: #0f0f23; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+    pre { background: #0f0f23; padding: 15px; border-radius: 8px; overflow-x: auto; margin: 10px 0; }
+    pre code { background: none; padding: 0; }
+    .auth-methods { display: flex; gap: 20px; flex-wrap: wrap; }
+    .auth-card { flex: 1; min-width: 250px; background: #16213e; padding: 15px; border-radius: 8px; }
+    .auth-card h3 { color: #fff; margin-bottom: 10px; }
+    .link-list { list-style: none; }
+    .link-list li { margin: 8px 0; }
+    .link-list a { color: #64b5f6; text-decoration: none; }
+    .link-list a:hover { text-decoration: underline; }
+    footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #333; color: #888; font-size: 0.9em; }
+    footer a { color: #64b5f6; }
+
+    /* Load more button */
+    .load-more-wrapper {
+      text-align: center;
+      margin: 24px 0;
+    }
+    .load-more-btn {
+      background: #1a3354;
+      color: #64b5f6;
+      border: 1px solid #2a4a7a;
+      border-radius: 8px;
+      padding: 12px 32px;
+      font-size: 0.95em;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .load-more-btn:hover { background: #243f6a; }
+    .load-more-btn:disabled { opacity: 0.6; cursor: default; }
+
+    @media (max-width: 600px) {
+      body { padding: 10px; }
+      html { overflow-x: hidden; }
+      * { overflow-wrap: break-word; word-break: break-word; }
+      th, td { padding: 8px; font-size: 0.9em; }
+      .auth-methods { flex-direction: column; }
+      .auth-card { min-width: 0; }
+      .search-box { flex-direction: column; }
+      .nav-buttons { flex-wrap: wrap; }
+      .passage-links { flex-direction: column; }
+    }
+
+    /* Search UI styles */
+    .search-section { background: #16213e; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    .search-box { display: flex; gap: 10px; margin-bottom: 15px; }
+    .search-box input {
+      flex: 1;
+      padding: 12px 15px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #0f0f23;
+      color: #e0e0e0;
+      font-size: 16px;
+    }
+    .search-box input:focus { outline: none; border-color: #64b5f6; }
+    .search-box button {
+      padding: 12px 24px;
+      background: #64b5f6;
+      color: #1a1a2e;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .search-box button:hover { background: #4a9fd9; }
+    .search-box button:disabled { background: #555; cursor: not-allowed; }
+    #searchProvenanceBtn { background: #f0a500; color: #1a1a2e; }
+    #searchProvenanceBtn:hover { background: #d4940a; }
+    .results-section { margin-top: 20px; }
+    .results-header { color: #fff; margin-bottom: 15px; font-size: 1.1em; }
+    .document-header {
+      background: #16213e;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      border-left: 3px solid #64b5f6;
+    }
+    .document-title { color: #fff; font-weight: 600; font-size: 1.1em; margin-bottom: 8px; }
+    .document-title .doc-title-link { color: #93c5fd; text-decoration: none; }
+    .document-title .doc-title-link:hover { color: #bfdbfe; text-decoration: underline; }
+    .document-summary { color: #888; font-size: 0.85em; }
+    .passage-card {
+      background: #0f0f23;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      border-left: 3px solid #4a9fd9;
+    }
+    .passage-page { color: #64b5f6; font-size: 0.85em; margin-bottom: 8px; }
+    .passage-excerpt { color: #b0b0b0; font-size: 0.95em; margin-bottom: 10px; }
+    .passage-links { display: flex; gap: 15px; flex-wrap: wrap; }
+    .passage-link { color: #64b5f6; text-decoration: none; font-size: 0.9em; }
+    .passage-link:hover { text-decoration: underline; }
+    /* Source PDF download button */
+    .download-pdf-btn {
+      background: #2a5a3a;
+      color: #4ade80;
+      border: 1px solid #3a7a4a;
+      border-radius: 4px;
+      padding: 5px 12px;
+      font-size: 0.85em;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    .download-pdf-btn:hover { background: #3a6a4a; }
+    .download-pdf-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .download-pdf-btn.loading { opacity: 0.7; cursor: wait; }
+    /* Hide button for injected chunks */
+    .result-score { color: #888; font-size: 0.85em; margin-bottom: 5px; }
+    .result-title { color: #fff; font-weight: 600; margin-bottom: 8px; }
+    .result-metadata { color: #888; font-size: 0.85em; margin-bottom: 8px; }
+    .result-excerpt { color: #b0b0b0; font-size: 0.95em; margin-bottom: 10px; }
+    .result-link { color: #64b5f6; text-decoration: none; font-size: 0.9em; }
+    .result-link:hover { text-decoration: underline; }
+    .doc-id-display { color: #666; font-size: 0.8em; cursor: default; }
+    .loading { text-align: center; padding: 20px; color: #888; }
+    .error { background: #3a1a1a; border-left-color: #ff6b6b; padding: 15px; border-radius: 6px; color: #ff8a8a; }
+    .catalog-link { margin-top: 15px; }
+    .catalog-link a { color: #64b5f6; text-decoration: none; }
+    .catalog-link a:hover { text-decoration: underline; }
+    /* Navigation button styles */
+    .nav-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .nav-btn {
+      background: #16213e;
+      color: #64b5f6;
+      border: 1px solid #333;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .nav-btn:hover:not(:disabled) { background: #1f2a4a; text-decoration: none; }
+    .nav-btn:disabled {
+      color: #555;
+      border-color: #333;
+      cursor: not-allowed;
+    }
+    /* Prev/Next chunk nav buttons */
+    .chunk-nav-btn {
+      background: #16213e;
+      color: #64b5f6;
+      border: 1px solid #333;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      cursor: pointer;
+    }
+    .chunk-nav-btn:hover:not(:disabled) { background: #1f2a4a; }
+    .chunk-nav-btn:disabled {
+      color: #555;
+      border-color: #333;
+      cursor: not-allowed;
+    }
+    .chunk-nav-btn.provenance {
+      color: #f0a500;
+      border-color: #f0a500;
+    }
+    .chunk-nav-btn.provenance:hover:not(:disabled) { background: #2a2a1a; }
+    /* Hide button for injected chunks */
+    .hide-chunk-btn {
+      background: none;
+      border: none;
+      color: #888;
+      cursor: pointer;
+      font-size: 0.85em;
+      padding: 4px 8px;
+      border-radius: 4px;
+      margin-top: 8px;
+    }
+    .hide-chunk-btn:hover { background: #1f2a4a; color: #e0e0e0; }
+    /* Inline image styles */
+    .doc-image {
+      max-width: 100%;
+      margin: 8px 0;
+      border-radius: 4px;
+    }
+    /* Provenance Prove button */
+    .prove-btn {
+      background: #64b5f6;
+      color: #1a1a2e;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .prove-btn:hover { background: #4a9fd9; }
+    .prove-btn:disabled { background: #555; cursor: not-allowed; }
+    /* Provenance modal */
+    .provenances-modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .provenances-modal {
+      background: #16213e;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 25px;
+      max-width: 500px;
+      width: 90%;
+      position: relative;
+    }
+    .provenances-modal h3 {
+      color: #fff;
+      margin-bottom: 15px;
+      font-size: 1.05em;
+    }
+    .provenances-modal .modal-close {
+      position: absolute;
+      top: 12px; right: 15px;
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 1.2em;
+      cursor: pointer;
+    }
+    .provenances-modal .modal-close:hover { color: #e0e0e0; }
+    .provenances-modal .modal-body {
+      color: #b0b0b0;
+      font-size: 0.95em;
+      min-height: 40px;
+    }
+    .provenances-links {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .provenances-links a {
+      color: #64b5f6;
+      text-decoration: none;
+      font-size: 0.9em;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .provenances-links a:hover { text-decoration: underline; }
+    .provenances-links a.disabled {
+      color: #555;
+      pointer-events: none;
+    }
+    .provenances-error {
+      color: #ff8a8a;
+      background: #3a1a1a;
+      padding: 12px;
+      border-radius: 6px;
+      border-left: 3px solid #ff6b6b;
+    }
+    /* Decode modal */
+    .decode-modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1100;
+    }
+    .decode-modal {
+      background: #16213e;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 25px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    .decode-modal h3 {
+      color: #fff;
+      margin-bottom: 15px;
+      font-size: 1.05em;
+    }
+    .decode-modal .modal-close {
+      position: absolute;
+      top: 12px; right: 15px;
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 1.2em;
+      cursor: pointer;
+    }
+    .decode-modal .modal-close:hover { color: #e0e0e0; }
+    .decode-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 15px 0;
+      font-size: 0.9em;
+    }
+    .decode-table th {
+      background: #0f0f23;
+      color: #64b5f6;
+      padding: 8px 12px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }
+    .decode-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #2a2a3a;
+      color: #b0b0b0;
+      vertical-align: top;
+    }
+    .decode-table td:first-child {
+      color: #64b5f6;
+      font-family: monospace;
+      white-space: nowrap;
+    }
+    .decode-table td:nth-child(2) {
+      color: #888;
+      font-size: 0.85em;
+    }
+    .decode-table td:last-child {
+      color: #e0e0e0;
+    }
+    .decode-hash {
+      font-family: monospace;
+      font-size: 0.85em;
+      word-break: break-all;
+      color: #aaa;
+    }
+    .decode-truncated {
+      font-family: monospace;
+      font-size: 0.85em;
+      color: #aaa;
+      cursor: pointer;
+    }
+    .decode-section-title {
+      color: #fff;
+      font-size: 0.95em;
+      font-weight: 600;
+      margin: 15px 0 8px;
+    }
+    .decode-success {
+      color: #4ade80;
+      background: #1a3a2a;
+      padding: 10px 14px;
+      border-radius: 6px;
+      border-left: 3px solid #4ade80;
+      margin-bottom: 15px;
+    }
+    .decode-error {
+      color: #ff8a8a;
+      background: #3a1a1a;
+      padding: 10px 14px;
+      border-radius: 6px;
+      border-left: 3px solid #ff6b6b;
+    }
+    /* ZK Status badge (inline on passage card) */
+    .zk-status-badge {
+      color: #888;
+      font-size: 0.9em;
+      cursor: pointer;
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      transition: color 0.2s, background 0.2s;
+    }
+    .zk-status-badge:hover { background: #1f2f4f; color: #64b5f6; }
+    .zk-status-badge.verified { color: #4ade80; cursor: pointer; }
+    .zk-status-badge.failed { color: #ff8a8a; cursor: pointer; }
+
+    /* Download proof link */
+    .zk-download-btn { color: #64b5f6; text-decoration: none; font-size: 0.9em; }
+    .zk-download-btn:hover { text-decoration: underline; }
+
+    /* How it works footer */
+    #howItWorksSection {
+      margin-top: 40px;
+      padding: 24px;
+      background: #16213e;
+      border-radius: 8px;
+      border-top: 3px solid #64b5f6;
+    }
+    #howItWorksSection h3 { color: #fff; margin-bottom: 12px; }
+    #howItWorksSection p { color: #b0b0b0; font-size: 0.9em; line-height: 1.7; }
+    #howItWorksSection ol { color: #888; font-size: 0.88em; line-height: 2; padding-left: 20px; margin-top: 10px; }
+    #howItWorksSection strong { color: #b0b0b0; }
+    #howItWorksSection a { color: #64b5f6; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Military Manuals — Military Doctrine RAG API</h1>
+    
+    <div class="hero">
+      <p>Search and retrieve information from military doctrine documents using natural language queries. Our RAG (Retrieval-Augmented Generation) API provides semantic search across curated military publications, enabling fast access to relevant operational guidance and procedures.</p>
+    </div>
+
+    <!-- Live Search Section -->
+    <div class="search-section">
+      <h2>Live Search</h2>
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Search military doctrine...">
+        <button id="searchBtn">Search</button>
+        <button id="searchProvenanceBtn">Search with Provenance</button>
+      </div>
+      <div class="catalog-link">
+        <a href="/catalog.html">Browse document catalog →</a>
+      </div>
+
+      <div id="resultsContainer" class="results-section"></div>
+    </div>
+
+    <h2>Collections</h2>
+    <table id="collectionsTable">
+      <thead>
+        <tr>
+          <th>Collection</th>
+          <th>Description</th>
+          <th>Documents</th>
+        </tr>
+      </thead>
+      <tbody id="collectionsBody">
+        <tr><td colspan="3"><em>Loading…</em></td></tr>
+      </tbody>
+    </table>
+
+    <script>
+    (function() {
+      fetch('/api/collections')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data) return;
+          const tbody = document.getElementById('collectionsBody');
+          tbody.innerHTML = '';
+          const collections = Array.isArray(data) ? data : (data.collections || []);
+          collections.forEach(col => {
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+              '<td><code>' + col.name + '</code></td>' +
+              '<td>' + (col.description || '—') + '</td>' +
+              '<td>' + (typeof col.doc_count === 'number' ? col.doc_count.toLocaleString() : '—') + '</td>';
+            tbody.appendChild(tr);
+          });
+        })
+        .catch(() => {});
+    })();
+    </script>
+
+    <h2>Query Example with Metadata Filtering</h2>
+    <pre><code>curl -X POST https://militarymanuals.ai/api/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "collection": "army",
+    "query": "How do I conduct urban operations?",
+    "metadata_filter": {
+      "category": "field-manual",
+      "classification": "unclassified"
+    }
+  }'</code></pre>
+
+    <h2>Authentication</h2>
+    <div class="auth-methods">
+      <div class="auth-card">
+        <h3>API Key</h3>
+        <p>Include your API key in the Authorization header:</p>
+        <pre><code>Authorization: Bearer YOUR_API_KEY</code></pre>
+      </div>
+    </div>
+
+    <h2>Discovery</h2>
+    <ul class="link-list">
+      <li><a href="/llms.txt">/llms.txt</a> — Structured API description for LLM agents</li>
+      <li><a href="/api/manifest">/api/manifest</a> — OpenAPI-compatible API manifest</li>
+      <li><a href="/api/collections">/api/collections</a> — List all available collections</li>
+    </ul>
+
+    <footer>
+    </footer>
+
+    <!-- How it works — sticky footer section -->
+    <div class="container">
+      <div id="howItWorksSection">
+        <h3>🔗 How ZK Provenance Works</h3>
+        <p>
+          Each passage in these search results is anchored to the Horizen blockchain at the time documents are registered.
+          The ZK circuit proves the following <em>without revealing the full document</em>:
+        </p>
+        <ol>
+          <li><strong>Poseidon Hash:</strong> The passage text is hashed using the Poseidon function into a leaf hash.</li>
+          <li><strong>Merkle Proof:</strong> The circuit proves this leaf is a member of the Merkle tree for this document.</li>
+          <li><strong>Chain Anchor:</strong> The Merkle root was anchored on Horizen mainnet when the document was registered — verified on-chain.</li>
+          <li><strong>ZK Verification:</strong> Anyone can verify this proof on Horizen via <a href="https://zkverify.io" target="_blank">zkVerify</a> — without downloading the document or trusting a third party.</li>
+        </ol>
+        <p style="margin-top:12px; color:#666; font-size:0.85em;">
+          This allows third parties to cryptographically verify that a passage existed in a document at a specific block — provably — without requiring access to the original file.
+          Click "🔗 Not verified" on any passage to generate and submit a ZK proof.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Provenance modal -->
+  <div id="provenancesModal" class="provenances-modal-overlay" style="display: none;">
+    <div class="provenances-modal">
+      <button class="modal-close" id="provenancesModalClose">✕</button>
+      <h3>🔗 Provenance Verification</h3>
+      <div class="modal-body" id="provenancesModalBody"></div>
+      <div class="provenances-links" id="provenancesLinks"></div>
+    </div>
+  </div>
+
+
+<script type="module">
+    import {
+      searchChunks,
+      fetchContextNav, fetchImageList,
+      fetchZKProof, submitProof, getProofStatus,
+      fetchCollections,
+      fetchSourceInfo, fetchSourcePdf,
+    } from './js/api.js';
+    import {
+      getState, setState, resetState,
+      getZkCache, setZkCache, seedZkCacheFromResults,
+      groupByDocId, computeLoadedDocCount,
+      INITIAL_SHOW, PAGE_SIZE,
+      recordSearch, saveCurrentSearch
+    } from './js/state.js';
+    import {
+      buildDocGroupHtml, buildPassageCard,
+      buildHowItWorksHtml, buildResultsModalHtml,
+      buildLoadMoreButton,
+      buildLoadingHtml, buildErrorHtml, buildEmptyHtml,
+      escapeHtml, extractPages
+    } from './js/renderer.js';
+
+    // Expose all imports on window for the legacy inline script
+    window.searchChunks = searchChunks;
+    window.fetchContextNav = fetchContextNav;
+    window.fetchImageList = fetchImageList;
+    window.fetchZKProof = fetchZKProof;
+    window.submitProof = submitProof;
+    window.getProofStatus = getProofStatus;
+    window.fetchCollections = fetchCollections;
+    window.fetchSourceInfo = fetchSourceInfo;
+    window.fetchSourcePdf = fetchSourcePdf;
+    window.getState = getState;
+    window.setState = setState;
+    window.resetState = resetState;
+    window.getZkCache = getZkCache;
+    window.setZkCache = setZkCache;
+    window.seedZkCacheFromResults = seedZkCacheFromResults;
+    window.groupByDocId = groupByDocId;
+    window.computeLoadedDocCount = computeLoadedDocCount;
+    window.INITIAL_SHOW = INITIAL_SHOW;
+    window.PAGE_SIZE = PAGE_SIZE;
+    window.recordSearch = recordSearch;
+    window.saveCurrentSearch = saveCurrentSearch;
+    window.buildDocGroupHtml = buildDocGroupHtml;
+    window.buildPassageCard = buildPassageCard;
+    window.buildHowItWorksHtml = buildHowItWorksHtml;
+    window.buildResultsModalHtml = buildResultsModalHtml;
+    window.buildLoadMoreButton = buildLoadMoreButton;
+    window.buildLoadingHtml = buildLoadingHtml;
+    window.buildErrorHtml = buildErrorHtml;
+    window.buildEmptyHtml = buildEmptyHtml;
+    window.escapeHtml = escapeHtml;
+    window.extractPages = extractPages;
+
+    import { init as initEventHandlers } from './js/event-handlers.js';
+    import { init as initApp } from './js/app.js';
+
+    /*
+     * WEBSITE-007 backwards-compatibility note:
+     * ─────────────────────────────────────────
+     * All inline helpers (renderResults, performSearch, wireZKButtons,
+     * _blockExplorerUrl, _decodeProof, _show*Modal, _verifyOnChain, etc.)
+     * were migrated to app.js and are preserved as window.* exports.
+     * event-handlers.js covers all search/modal/click-outside events.
+     * The window globals below mirror what the legacy inline script provided.
+     *
+     * What was preserved via window.*:
+     *   window.handleSearch         ← app.js handleSearch()
+     *   window.handleLoadMore       ← app.js handleLoadMore()
+     *   window.handleNavProvenance  ← app.js handleNavProvenance()
+     *   window.handleNavPlain       ← app.js handleNavPlain()
+     *   window._verifyOnChain      ← app.js verifyOnChain()
+     *   window._downloadProof      ← app.js downloadProof()
+     *   window._showHowItWorksModal← app.js showHowItWorksModal()
+     *   window._showDecodeModal    ← app.js showDecodeModal()
+     *   window._showResultsModal   ← app.js showResultsModal()
+     *   window.pollInFlightKurierJobs ← app.js pollInFlightKurierJobs() [background job poller]
+     *   window._showToast           ← app.js _showToast() [toast notification]
+     *   window.fetchZKProof        ← api.js fetchZKProof() [exposed by module script above]
+     *   window.fetchContextNav     ← api.js fetchContextNav() [exposed by module script above]
+     *   window.fetchImageList      ← api.js fetchImageList() [exposed by module script above]
+     *   window.submitProof         ← api.js submitProof() [exposed by module script above]
+     *   window.getProofStatus      ← api.js getProofStatus() [exposed by module script above]
+     *   window.searchChunks        ← api.js searchChunks() [exposed by module script above]
+     *   window.getZkCache          ← state.js getZkCache() [exposed by module script above]
+     *   window.setZkCache          ← state.js setZkCache() [exposed by module script above]
+     *   window.buildZkSubmenu      ← renderer.js buildZkSubmenu() [exposed by module script above]
+     *   window.escapeHtml          ← renderer.js escapeHtml() [exposed by module script above]
+     * ─────────────────────────────────────────
+     */
+    initApp();
+    initEventHandlers();
+    // Resume polling for any in-flight Kurier jobs from previous page loads
+    window.pollInFlightKurierJobs?.();
+    </script>
+
+  <div id="paymentModal" class="decode-modal-overlay" style="display: none;">
+    <div class="decode-modal">
+      <button class="modal-close" id="paymentModalClose">✕</button>
+      <h3 id="paymentModalTitle">Download PDF — $0.10 USDC</h3>
+      <div id="paymentModalBody" class="decode-table" style="margin-top:12px;">
+        <div style="color:#b0b0b0;text-align:center;padding:20px;">
+          <div id="paymentSpinner" style="display:inline-block;width:20px;height:20px;border:2px solid #64b5f6;border-top-color:transparent;border-radius:50%;animation:zk-spin 0.8s linear infinite;vertical-align:middle;margin-right:8px;"></div>
+          Connecting to wallet…
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="decodeModal" class="decode-modal-overlay" style="display: none;">
+    <div class="decode-modal">
+      <button class="modal-close" id="decodeModalClose">✕</button>
+      <h3>🔍 ZK Proof Explanation</h3>
+      <div id="decodeModalBody"></div>
+    </div>
+  </div>
+</body>
+</html>

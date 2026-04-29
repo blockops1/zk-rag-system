@@ -1,0 +1,5 @@
+[profile.default]
+fs_permissions = [
+  { access = "read", path = "$DATA_DIR/" },
+  { access = "read-write", path = "$REPO_DIR/pipeline_f/broadcast/" }
+]

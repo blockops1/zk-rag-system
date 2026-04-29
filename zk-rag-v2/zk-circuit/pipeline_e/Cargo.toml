@@ -1,0 +1,18 @@
+[package]
+name = "pipeline_e"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+plonky2 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+clap = { workspace = true }
+chrono = { workspace = true }
+unicode-normalization = { workspace = true }
+zk-circuit = { workspace = true }
+
+[[bin]]
+name = "pipeline_e"
+path = "src/main.rs"

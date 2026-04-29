@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Catalog — Military Doctrine RAG API</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      line-height: 1.6;
+      padding: 20px;
+    }
+    .container { max-width: 960px; margin: 0 auto; }
+    h1 { color: #fff; margin-bottom: 10px; }
+    h2 { color: #fff; margin: 30px 0 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+    .hero { background: #16213e; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    .hero p { color: #b0b0b0; }
+    .back-link { color: #64b5f6; text-decoration: none; font-size: 0.9em; }
+    .back-link:hover { text-decoration: underline; }
+    code { background: #0f0f23; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+    .loading { text-align: center; padding: 40px; color: #888; }
+    .error { background: #3a1a1a; border-left: 3px solid #ff6b6b; padding: 15px; border-radius: 6px; color: #ff8a8a; }
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab {
+      background: #16213e;
+      color: #888;
+      border: 1px solid #333;
+      border-bottom: none;
+      border-radius: 6px 6px 0 0;
+      padding: 8px 18px;
+      cursor: pointer;
+      font-size: 0.9em;
+      transition: background 0.15s, color 0.15s;
+    }
+    .tab:hover { background: #1f2a4a; color: #b0b0b0; }
+    .tab.active { background: #64b5f6; color: #1a1a2e; font-weight: 600; border-color: #64b5f6; }
+    /* Collection panel */
+    .collection-panel { display: none; }
+    .collection-panel.active { display: block; }
+    .collection-header { margin-bottom: 20px; }
+    .collection-header h3 { color: #fff; margin-bottom: 6px; }
+    .collection-meta { color: #888; font-size: 0.85em; margin-bottom: 10px; }
+    /* Doc list */
+    .doc-list { display: flex; flex-direction: column; gap: 8px; }
+    .doc-card {
+      background: #16213e;
+      border: 1px solid #2a2a4a;
+      border-radius: 6px;
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      transition: border-color 0.15s;
+    }
+    .doc-card:hover { border-color: #64b5f6; }
+    .doc-info { flex: 1; min-width: 0; }
+    .doc-title { color: #fff; font-weight: 600; margin-bottom: 4px; word-break: break-word; }
+    .doc-meta { color: #888; font-size: 0.82em; display: flex; gap: 12px; flex-wrap: wrap; }
+    .doc-meta span { display: flex; align-items: center; gap: 4px; }
+    .doc-links { display: flex; gap: 10px; flex-shrink: 0; flex-wrap: wrap; align-items: center; }
+    .doc-links a {
+      color: #64b5f6;
+      text-decoration: none;
+      font-size: 0.85em;
+      white-space: nowrap;
+    }
+    .doc-links a:hover { text-decoration: underline; }
+    .doc-links .search-btn {
+      background: #64b5f6;
+      color: #1a1a2e;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 12px;
+      font-size: 0.82em;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .doc-links .search-btn:hover { background: #4a9fd9; }
+    /* Source PDF download button */
+    .download-pdf-btn {
+      background: #2a5a3a;
+      color: #4ade80;
+      border: 1px solid #3a7a4a;
+      border-radius: 4px;
+      padding: 5px 12px;
+      font-size: 0.82em;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-block;
+      white-space: nowrap;
+    }
+    .download-pdf-btn:hover { background: #3a6a4a; }
+    .download-pdf-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .download-pdf-btn.loading { opacity: 0.7; cursor: wait; }
+    footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #333; color: #888; font-size: 0.9em; }
+    footer a { color: #64b5f6; }
+    @media (max-width: 600px) {
+      .doc-card { flex-direction: column; gap: 10px; }
+      .doc-links { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← Back to Search</a>
+
+    <h1 style="margin-top: 16px;">Document Catalog</h1>
+    <div class="hero">
+      <p>Browse all available military doctrine documents by collection. Select a branch tab above to see its documents.</p>
+    </div>
+
+    <div id="loading" class="loading">Loading catalog…</div>
+    <div id="error" class="error" style="display:none;"></div>
+
+    <div id="tabs" class="tabs" style="display:none;"></div>
+    <div id="panels" style="display:none;"></div>
+
+    <footer>
+      <a href="/">← Back to Search</a> · Military Doctrine RAG API
+    </footer>
+  </div>
+
+  <div id="paymentModal" class="decode-modal-overlay" style="display: none;">
+    <div class="decode-modal">
+      <button class="modal-close" id="paymentModalClose">✕</button>
+      <h3 id="paymentModalTitle">Download PDF — $0.10 USDC</h3>
+      <div id="paymentModalBody" style="margin-top:12px;">
+        <div style="color:#b0b0b0;text-align:center;padding:20px;">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+
+  <script>
+    const API_BASE = window.location.protocol + '//' + window.location.host + '/api';
+    const loading = document.getElementById('loading');
+    const errorEl = document.getElementById('error');
+    const tabsContainer = document.getElementById('tabs');
+    const panelsContainer = document.getElementById('panels');
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function showError(msg) {
+      loading.style.display = 'none';
+      errorEl.style.display = 'block';
+      errorEl.textContent = msg;
+    }
+
+    async function init() {
+      let catalog;
+      try {
+        const resp = await fetch(`${API_BASE}/catalog`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.statusText}`);
+        catalog = await resp.json();
+      } catch (err) {
+        showError('Failed to load catalog: ' + err.message);
+        return;
+      }
+
+      loading.style.display = 'none';
+      tabsContainer.style.display = 'flex';
+      panelsContainer.style.display = 'block';
+
+      catalog.forEach((collection, idx) => {
+        // Tab button
+        const tab = document.createElement('button');
+        tab.className = 'tab' + (idx === 0 ? ' active' : '');
+        tab.textContent = `${collection.name} (${collection.document_count})`;
+        tab.addEventListener('click', () => switchTab(idx));
+        tabsContainer.appendChild(tab);
+
+        // Panel
+        const panel = document.createElement('div');
+        panel.className = 'collection-panel' + (idx === 0 ? ' active' : '');
+        panel.id = `panel-${idx}`;
+
+        const header = document.createElement('div');
+        header.className = 'collection-header';
+        header.innerHTML = `
+          <h3>${escapeHtml(collection.name)}</h3>
+          <p class="collection-meta">${escapeHtml(collection.description)}</p>
+          <p class="collection-meta">${collection.document_count} document${collection.document_count !== 1 ? 's' : ''}</p>
+        `;
+        panel.appendChild(header);
+
+        const list = document.createElement('div');
+        list.className = 'doc-list';
+
+        if (!collection.documents || collection.documents.length === 0) {
+          list.innerHTML = '<div style="color:#888;padding:20px 0;">No documents in this collection.</div>';
+        } else {
+          collection.documents.forEach(doc => {
+            const iaLink = doc.ia_identifier
+              ? `<a href="https://archive.org/details/${escapeHtml(doc.ia_identifier)}" target="_blank">📄 View on Archive.org</a>`
+              : '';
+
+            const metaParts = [];
+            if (doc.category) metaParts.push(escapeHtml(doc.category));
+            if (doc.pub_year) metaParts.push(String(doc.pub_year));
+            if (doc.page_count) metaParts.push(`${doc.page_count} pages`);
+
+            const card = document.createElement('div');
+            card.className = 'doc-card';
+            card.innerHTML = `
+              <div class="doc-info">
+                <div class="doc-title">${escapeHtml(doc.title)}</div>
+                <div class="doc-meta">${metaParts.map(m => `<span>${m}</span>`).join('')}</div>
+              </div>
+              <div class="doc-links">
+                ${iaLink}
+                <button class="download-pdf-btn" data-doc-id="${escapeHtml(doc.doc_id)}" data-doc-title="${escapeHtml(doc.title)}">💰 Download PDF — $0.10</button>
+              </div>
+            `;
+            list.appendChild(card);
+          });
+        }
+
+        panel.appendChild(list);
+        panelsContainer.appendChild(panel);
+      });
+
+      // Expose for inline onclick
+      window._switchTab = switchTab;
+    }
+
+    function switchTab(idx) {
+      document.querySelectorAll('.tab').forEach((t, i) => {
+        t.classList.toggle('active', i === idx);
+      });
+      document.querySelectorAll('.collection-panel').forEach((p, i) => {
+        p.classList.toggle('active', i === idx);
+      });
+    }
+
+    // ─── X402 Paid PDF Download ─────────────────────────────────────────────────
+
+    async function fetchSourceInfo(docId) {
+      const resp = await fetch(`${API_BASE}/source/${encodeURIComponent(docId)}/info`);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+        throw new Error(err.detail?.error || `HTTP ${resp.status}`);
+      }
+      return resp.json();
+    }
+
+    async function fetchSourcePdf(docId, paymentSignature) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (paymentSignature) headers['Payment-Signature'] = paymentSignature;
+      const resp = await fetch(`${API_BASE}/source/${encodeURIComponent(docId)}`, { headers });
+      if (resp.status === 402) {
+        return { ok: false, blob: null, paymentRequired: true, error: 'Payment required' };
+      }
+      if (!resp.ok) {
+        return { ok: false, blob: null, paymentRequired: false, error: `HTTP ${resp.status}` };
+      }
+      const blob = await resp.blob();
+      return { ok: true, blob, contentType: resp.headers.get('Content-Type') || '', paymentRequired: false, error: null };
+    }
+
+    function showPaymentModal(html) {
+      const modal = document.getElementById('paymentModal');
+      const body = document.getElementById('paymentModalBody');
+      const title = document.getElementById('paymentModalTitle');
+      if (!modal || !body) return;
+      if (title) title.textContent = 'Download PDF — $0.10 USDC';
+      body.innerHTML = html;
+      modal.style.display = 'flex';
+    }
+
+    function hidePaymentModal() {
+      const modal = document.getElementById('paymentModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function triggerDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+
+    async function buildX402Payload(docId, sourceInfo) {
+      const now = Math.floor(Date.now() / 1000);
+      const validAfter = now - 60;
+      const validBefore = now + 300;
+      const nonce = Array.from({ length: 32 }, () => Math.floor(Math.random() * 256));
+      const nonceHex = '0x' + nonce.map(b => b.toString(16).padStart(2, '0')).join('');
+
+      const chainId = 8453; // Base mainnet
+
+      const fullMessage = {
+        types: {
+          EIP712Domain: [
+            { name: 'name', type: 'string' },
+            { name: 'version', type: 'string' },
+            { name: 'chainId', type: 'uint256' },
+            { name: 'verifyingContract', type: 'address' },
+          ],
+          TransferWithAuthorization: [
+            { name: 'from', type: 'address' },
+            { name: 'to', type: 'address' },
+            { name: 'value', type: 'uint256' },
+            { name: 'validAfter', type: 'uint256' },
+            { name: 'validBefore', type: 'uint256' },
+            { name: 'nonce', type: 'bytes32' },
+          ],
+        },
+        primaryType: 'TransferWithAuthorization',
+        domain: {
+          name: 'USD Coin',
+          version: '2',
+          chainId,
+          verifyingContract: sourceInfo.asset,
+        },
+        message: {
+          from: null,
+          to: sourceInfo.pay_to,
+          value: BigInt(sourceInfo.price_micro_usdc),
+          validAfter,
+          validBefore,
+          nonce: nonceHex,
+        },
+      };
+
+      return { fullMessage, message: fullMessage.message, validAfter, validBefore, nonceHex };
+    }
+
+    async function handleSourceDownload(docId, title) {
+      let sourceInfo;
+      try {
+        sourceInfo = await fetchSourceInfo(docId);
+      } catch (err) {
+        alert('Could not load document info: ' + err.message);
+        return;
+      }
+
+      const result = await fetchSourcePdf(docId);
+      if (result.ok) {
+        triggerDownload(result.blob, sourceInfo.filename || `${title || 'document'}.pdf`);
+        return;
+      }
+      if (!result.paymentRequired) {
+        alert('Download failed: ' + result.error);
+        return;
+      }
+
+      showPaymentModal(`
+        <div style="text-align:center;padding:10px 0;">
+          <div style="font-size:1.2em;color:#fff;margin-bottom:8px;">$${sourceInfo.price_usd} USDC</div>
+          <div style="color:#888;font-size:0.9em;margin-bottom:20px;">
+            Pay to download <strong style="color:#e0e0e0;">${escapeHtml(sourceInfo.title || title || 'this document')}</strong>
+          </div>
+          <div style="color:#888;font-size:0.85em;margin-bottom:20px;">
+            Network: Base · Asset: USDC<br>
+            Recipient: ${escapeHtml(sourceInfo.pay_to)}
+          </div>
+          <button id="payUsdcBtn" class="download-pdf-btn" style="font-size:1em;padding:10px 24px;">
+            💰 Pay $${sourceInfo.price_usd} with MetaMask
+          </button>
+          <div id="payError" style="color:#ff8a8a;margin-top:12px;font-size:0.9em;display:none;"></div>
+        </div>
+      `);
+
+      document.getElementById('payUsdcBtn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('payUsdcBtn');
+        const errEl = document.getElementById('payError');
+        if (!btn) return;
+        btn.disabled = true;
+        btn.textContent = 'Waiting for wallet…';
+        if (errEl) errEl.style.display = 'none';
+
+        try {
+          if (!window.ethereum) {
+            throw new Error('MetaMask not found. Please install MetaMask to pay for downloads.');
+          }
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          const from = accounts[0];
+
+          const { fullMessage, validAfter, validBefore, nonceHex } = await buildX402Payload(docId, sourceInfo);
+          fullMessage.message.from = from;
+
+          const signature = await window.ethereum.request({
+            method: 'eth_signTypedData_v4',
+            params: [from, JSON.stringify(fullMessage)],
+          });
+
+          const payload = {
+            x402Version: 2,
+            resource: {
+              url: `${window.location.protocol}//${window.location.host}/api/source/${docId}`,
+              description: `Full PDF download: ${sourceInfo.title || title || 'document'}`,
+              mimeType: 'application/pdf',
+            },
+            accepted: {
+              scheme: 'exact',
+              network: 'eip155:8453',
+              amount: String(sourceInfo.price_micro_usdc),
+              asset: sourceInfo.asset,
+              payTo: sourceInfo.pay_to,
+              maxTimeoutSeconds: 300,
+              extra: { assetTransferMethod: 'eip3009', name: 'USD Coin', version: '2' },
+            },
+            payload: {
+              signature,
+              authorization: { from, to: sourceInfo.pay_to, value: String(sourceInfo.price_micro_usdc), validAfter: String(validAfter), validBefore: String(validBefore), nonce: nonceHex },
+            },
+          };
+
+          const encoder = new TextEncoder();
+          const paymentSignature = btoa(String.fromCharCode(...encoder.encode(JSON.stringify(payload))));
+
+          btn.textContent = 'Verifying payment…';
+          const retryResult = await fetchSourcePdf(docId, paymentSignature);
+          if (retryResult.ok) {
+            hidePaymentModal();
+            triggerDownload(retryResult.blob, sourceInfo.filename || `${title || 'document'}.pdf`);
+          } else {
+            throw new Error(retryResult.error || 'Payment verification failed');
+          }
+        } catch (err) {
+          if (errEl) { errEl.textContent = err.message || 'Payment failed'; errEl.style.display = 'block'; }
+          if (btn) { btn.disabled = false; btn.textContent = '💰 Pay $0.10 with MetaMask'; }
+        }
+      });
+    }
+
+    // Delegated click handler for download buttons
+    document.addEventListener('click', (e) => {
+      if (e.target.classList.contains('download-pdf-btn')) {
+        const btn = e.target;
+        const docId = btn.dataset.docId;
+        const docTitle = btn.dataset.docTitle || 'document';
+        if (docId) handleSourceDownload(docId, docTitle);
+      }
+    });
+
+    // Payment modal close
+    document.getElementById('paymentModalClose')?.addEventListener('click', () => {
+      const m = document.getElementById('paymentModal');
+      if (m) m.style.display = 'none';
+    });
+    document.getElementById('paymentModal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'paymentModal') document.getElementById('paymentModal').style.display = 'none';
+    });
+
+    init();
+  </script>
+</body>
+</html>

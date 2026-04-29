@@ -1,0 +1,17 @@
+[Unit]
+Description=RAG Query API Server
+After=network.target qdrant.service
+Wants=qdrant.service
+
+[Service]
+Type=simple
+User=youruser
+WorkingDirectory=$REPO_DIR/shared
+ExecStart=$REPO_DIR/venv/bin/python3 $REPO_DIR/shared/api_server.py
+Restart=always
+RestartSec=5s
+StandardOutput=append:$DATA_DIR/logs/api_server_stdout.log
+StandardError=append:$DATA_DIR/logs/api_server_stderr.log
+
+[Install]
+WantedBy=multi-user.target

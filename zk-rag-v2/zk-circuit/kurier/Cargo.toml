@@ -1,0 +1,11 @@
+[package]
+name = "kurier"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+ureq = { version = "2", features = ["json"] }
+thiserror = "1"
+tracing = { workspace = true }

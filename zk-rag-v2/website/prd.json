@@ -1,0 +1,175 @@
+{
+  "userStories": [
+    {
+      "id": "WEBSITE-001",
+      "title": "Create JS module infrastructure and api.js",
+      "description": "Current state: website/index.html is a 1642-line monolith with all JS functions as globals.\n\nWhat to build:\n1. Create website/js/ directory\n2. Create website/js/api.js as an ES module. It contains all HTTP fetch calls to the API, zero DOM, zero global state.\n\nFunctions to extract from index.html into api.js:\n- API_BASE constant (= window.location.origin + '/api')\n- CONTEXT_API_BASE constant (= API_BASE + '/context')\n- searchChunks(query, {top_k, collection, provenance}) — calls POST /api/query or POST /api/query-provable\n- fetchContextNav(docId, chunkIndex, collection, windowSize) — calls GET /api/context with query params\n- fetchZKProof(docId, chunkId, collection) — calls POST /api/provenance/prove\n- submitProof({proof_hex, public_inputs_hex, vk_hex}) — calls POST /api/provenance/submit\n- getProofStatus(jobId) — calls GET /api/provenance/status/{job_id}\n\nAuth: each function reads the global `apiKey` variable (set elsewhere in index.html) and adds 'Authorization: Bearer ' + apiKey to headers if set.\n\nEach function returns the parsed JSON. Throws on non-OK response.\n\nDo NOT wire any events, do NOT touch DOM, do NOT create global state.\n",
+      "acceptanceCriteria": [
+        "python3 -m py_compile $REPO_DIR/website/js/api.js exits 0 2>&1 || echo 'js file - skip py compile'",
+        "test -f $REPO_DIR/website/js/api.js"
+      ],
+      "qualityChecks": [
+        "grep -c 'document\\|innerHTML\\|addEventListener\\|querySelector' $REPO_DIR/website/js/api.js || echo '0 DOM calls in api.js'"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0,
+      "dependsOn": [],
+      "dependencyPolicy": "block",
+      "contextFiles": [
+        "website/index.html (lines 888-913: fetchContextNav and fetchZKProof — use as reference for request/response shapes)"
+      ]
+    },
+    {
+      "id": "WEBSITE-002",
+      "title": "Create state.js — in-memory state module",
+      "description": "Current state: _allResults, _loadedDocCount, _zkCache, _lastSearchWasProvenance, PAGE_SIZE are global variables in index.html.\n\nWhat to build:\nCreate website/js/state.js as an ES module with pure getter/setter functions for all in-memory state.\n\nState variables:\n- _allResults: array (full result set from last search)\n- _loadedDocCount: number (how many doc groups currently shown)\n- _zkCache: object keyed by chunkId (proof data: {proof_hex, vk_hex, public_inputs_hex, public_inputs, evm_block_number, job_id, explorer_url, tx_hash, tx_explorer_url, block_hash, block_explorer_url})\n- _lastSearchWasProvenance: boolean\n- PAGE_SIZE: number = 3\n\nExported functions:\n- getResults() → _allResults\n- setResults(results, provenance) → sets _allResults and _lastSearchWasProvenance\n- getLoadedDocCount() → _loadedDocCount\n- incrementLoadedDocCount(n) → _loadedDocCount += n, returns new value\n- resetLoadedDocCount() → _loadedDocCount = 0\n- getZkCache() → _zkCache\n- cacheZkProof(chunkId, proofData) → _zkCache[chunkId] = {...existing, ...proofData}\n- cacheVerificationResult(chunkId, verificationData) → merge verification fields into _zkCache[chunkId]\n- getChunkById(chunkId) → finds and returns chunk from _allResults where chunk.chunk_id === chunkId\n- getLastSearchWasProvenance() → boolean\n- isProvenanceMode() → _lastSearchWasProvenance\n\nNo fetch calls, no DOM access. Pure state.\n",
+      "acceptanceCriteria": [
+        "test -f $REPO_DIR/website/js/state.js",
+        "grep -c 'fetch\\|document\\|innerHTML' $REPO_DIR/website/js/state.js | grep -q '^0$' && echo 'PASS: no DOM/fetch in state.js'"
+      ],
+      "qualityChecks": [
+        "grep -c 'export\\|function ' $REPO_DIR/website/js/state.js"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0,
+      "dependsOn": [],
+      "dependencyPolicy": "block",
+      "contextFiles": [
+        "website/index.html (lines 698-720: how _allResults, _loadedDocCount, _zkCache are used)"
+      ]
+    },
+    {
+      "id": "WEBSITE-003",
+      "title": "Create renderer.js — pure HTML builder functions",
+      "description": "Current state: _buildDocGroupHtml, buildPassageCard, wireZKButtons are global functions in index.html (lines 603-800+). They build HTML strings and manipulate DOM.\n\nWhat to build:\nCreate website/js/renderer.js as an ES module. It exports pure functions that return HTML strings. Zero fetch, zero DOM side-effects.\n\nRequired exports:\n- escapeHtml(str) → escapes & < > \" ' — move from index.html\n- extractPages(text, currentPage) → from index.html line 580-602 area — extracts page numbers from text\n- buildLoadMoreButton(remainingDocCount) → '<div class=\"load-more-wrapper\">...</div>' string\n- buildDocGroupHtml(docId, passages, allResults) → full HTML for one document's group. References index.html lines 603-655 for exact field mapping (title, metadata, passage cards, etc.)\n- buildPassageCard(chunk, zkProof, isProvenanceSearch) → HTML for a single passage card with nav buttons and ZK proof button. References index.html lines 916-953 for exact structure. The zkProof button appears if zkProof && zkProof.proof_hex.\n- buildResultsHtml(state) → full results HTML: doc groups + load-more button. state has: results, loadedDocCount, docGroups (derived), remaining.\n- buildLoadMoreHtml(remainingDocCount) → just the load-more button wrapper HTML\n\nwireNewCard(cardElement, chunk) → DOM side-effect function (exception to pure). It attaches ZK expand button listener and image loader to a newly inserted card element. Takes the DOM node, not a string.\n\nCopy the exact HTML structure from index.html for each builder function. The chunk fields are: doc_id, chunk_id, chunk_index, collection, page, text, score, metadata (with title, doc_type, branch, pub_year, page_count), ia_identifier, ia_url, evm_block_number, zk_proof (if provenance search).\n",
+      "acceptanceCriteria": [
+        "test -f $REPO_DIR/website/js/renderer.js",
+        "grep -c 'export\\|function ' $REPO_DIR/website/js/renderer.js"
+      ],
+      "qualityChecks": [
+        "grep -c 'fetch\\|XMLHttpRequest' $REPO_DIR/website/js/renderer.js | grep -q '^0$' && echo 'PASS: no network in renderer'"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0,
+      "dependsOn": ["WEBSITE-001", "WEBSITE-002"],
+      "dependencyPolicy": "block",
+      "contextFiles": [
+        "website/index.html (lines 580-655: _buildDocGroupHtml and helpers)",
+        "website/index.html (lines 916-953: buildPassageCard logic)",
+        "website/index.html (lines 730-740: load-more button HTML)"
+      ]
+    },
+    {
+      "id": "WEBSITE-004",
+      "title": "Create app.js — orchestration actions",
+      "description": "Current state: performSearch() (lines 657-751) is a monolithic function doing API call + state update + rendering + event wiring all at once. event-delegation handler at lines 1008-1060 handles nav and load-more with entangled logic.\n\nWhat to build:\nCreate website/js/app.js as an ES module. It imports api.js and state.js and renderer.js. It exports async action functions called by event handlers.\n\nRequired exports:\n- handleSearch(query, provenance): calls api.searchChunks → state.setResults → renderer.buildResultsHtml → sets resultsContainer.innerHTML → calls wireZKButtons() on new cards\n- handleLoadMore(): reads state.getLoadedDocCount() → state.incrementLoadedDocCount(PAGE_SIZE) → builds new doc groups HTML → insertAdjacentHTML → wireNewCard on each new card → update/replace load-more button text\n- handleNavProvenance(docId, chunkId, chunkIndex, collection, direction): calls api.fetchContextNav(docId, chunkIndex+direction, collection, 0) → api.fetchZKProof(docId, chunkId, collection) → state.cacheZkProof → renderer.buildPassageCard → replace card in DOM\n- handleNavPlain(docId, chunkId, chunkIndex, collection, direction): calls api.fetchContextNav → replace card, no ZK proof\n- handleVerifyOnChain(chunkId): reads state.getZkCache()[chunkId] → api.submitProof → poll with api.getProofStatus → state.cacheVerificationResult\n\nAll functions read the global `resultsContainer` DOM element (defined in index.html) for DOM manipulation.\n\nwireZKButtons() from index.html lines 756-800 should be moved to app.js as a local function called after each render. It handles the cloneNode pattern for ZK button listeners.\n",
+      "acceptanceCriteria": [
+        "test -f $REPO_DIR/website/js/app.js",
+        "grep -c 'export.*function ' $REPO_DIR/website/js/app.js"
+      ],
+      "qualityChecks": [
+        "grep -c 'export' $REPO_DIR/website/js/app.js"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0,
+      "dependsOn": ["WEBSITE-001", "WEBSITE-002", "WEBSITE-003"],
+      "dependencyPolicy": "block",
+      "contextFiles": [
+        "website/index.html (lines 657-751: performSearch — primary reference for handleSearch logic)",
+        "website/index.html (lines 1527-1628: load-more handler — reference for handleLoadMore)",
+        "website/index.html (lines 1015-1053: nav+provenance handler — reference for handleNavProvenance)",
+        "website/index.html (lines 1402-1475: _verifyOnChain — reference for handleVerifyOnChain)"
+      ]
+    },
+    {
+      "id": "WEBSITE-005",
+      "title": "Create event-handlers.js — event listener registration",
+      "description": "Current state: index.html has all event listeners registered inline (search button click, search input keypress, load-more delegated click, nav delegated click). Lines 1485-1525 approximately.\n\nWhat to build:\nCreate website/js/event-handlers.js as an ES module. It imports app.js action functions and registers all event listeners on the page.\n\nRequired registrations:\n- search button click → app.handleSearch(searchInput.value, false)\n- search (provenance) button click → app.handleSearch(searchInput.value, true)\n- search input keypress Enter → app.handleSearch(searchInput.value, false)\n- resultsContainer delegated click → route to handleLoadMore (if id=loadMoreBtn) or handleNav (if nav button)\n\nDelegated click handler reads e.target.closest('.chunk-nav-btn') to find the button, then reads dataset.action, docId, chunkId, chunkIndex, collection from the closest .passage-card.\n\nDelegated click also handles: .load-more-btn → app.handleLoadMore().\n\nThe searchProvenanceBtn reference comes from: document.getElementById('searchProvenanceBtn') — same as current code.\n\nNo api calls, no DOM building. Pure event wiring.\n",
+      "acceptanceCriteria": [
+        "test -f $REPO_DIR/website/js/event-handlers.js",
+        "grep -c 'addEventListener' $REPO_DIR/website/js/event-handlers.js"
+      ],
+      "qualityChecks": [
+        "grep -c 'fetch\\|innerHTML' $REPO_DIR/website/js/event-handlers.js | grep -q '^0$' && echo 'PASS: no fetch/innerHTML'"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0,
+      "dependsOn": ["WEBSITE-004"],
+      "dependencyPolicy": "block",
+      "contextFiles": [
+        "website/index.html (lines 1485-1525: event listener registration — reference for what to wire)"
+      ]
+    },
+    {
+      "id": "WEBSITE-006",
+      "title": "Refactor index.html to import JS modules",
+      "description": "Current state: index.html contains all ~1640 lines of JS as a single <script> block.\n\nWhat to build:\nSplit the JS into ES modules. Keep the HTML, CSS, and the ZK submenu/verification UI (inline JS that uses api.js and state.js) intact.\n\nSteps:\n1. Add <script type=\"module\"> tags inside <head> or before </body> that import the 4 module files:\n   <script type=\"module\">\n     import './js/api.js';\n     import './js/state.js';\n     import './js/renderer.js';\n     import './js/app.js';\n     import './js/event-handlers.js';\n   </script>\n\n2. Remove ALL JavaScript functions from the inline <script> block EXCEPT:\n   - The ZK submenu and verification functions that reference _zkCache: _buildSubmenu, _downloadProof, _verifyOnChain, _showHowItWorksModal, showProvenanceModal, closeProvenanceModal, showResultsModal\n   - The provenances-modal HTML (lines 567-573)\n   - The zk-submenu HTML builder\n   - These need access to state._zkCache and api.js functions — import them at the top of the inline script\n\n3. Remove: performSearch, _buildDocGroupHtml, fetchContextNav, fetchZKProof, buildPassageCard, wireZKButtons, all event listener registrations, global state variables (_allResults, _loadedDocCount, _zkCache, PAGE_SIZE, _lastSearchWasProvenance).\n\n4. Keep global variables needed by the inline ZK UI: apiKey, _zkCache (import from state.js instead), showProvenanceModal, closeProvenanceModal, showResultsModal.\n\n5. The provenances-modal HTML and the ZK submenu/inline JS stay in index.html exactly as they are now.\n\n6. The inline ZK script should start with:\n   <script type=\"module\">\n     import { _zkCache, cacheZkProof, cacheVerificationResult, getZkCache } from './js/state.js';\n     import * as api from './js/api.js';\n     // ... existing ZK functions unchanged, just use api.fetchZKProof etc.\n   </script>\n\nCAUTION: Test carefully. The ZK functions call api.submitProof and api.getProofStatus and api.fetchZKProof. These must continue to work.\n",
+      "acceptanceCriteria": [
+        "grep -c '<script type=\"module\"' $REPO_DIR/website/index.html | grep -q '^1$' && echo 'PASS: exactly one module script tag'",
+        "python3 -m pytest $REPO_DIR/tests/test_api_server.py -q | tail -1"
+      ],
+      "qualityChecks": [
+        "grep -c 'function performSearch\\|function _buildDocGroupHtml\\|function fetchContextNav' $REPO_DIR/website/index.html | grep -q '^0$' && echo 'PASS: old functions removed from index.html'"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0,
+      "dependsOn": ["WEBSITE-005"],
+      "dependencyPolicy": "block",
+      "contextFiles": [
+        "website/index.html (lines 1-600: HTML + CSS — keep as-is)",
+        "website/index.html (lines 1119-1200: ZK submenu functions — keep but convert to module import)",
+        "website/index.html (lines 1320-1490: inline JS — review each line for what to keep vs remove)"
+      ]
+    },
+    {
+      "id": "WEBSITE-007",
+      "title": "Write JS unit tests for api.js, state.js, renderer.js",
+      "description": "Current state: No JS unit tests exist.\n\nWhat to build:\nCreate website/js/api.test.js, website/js/state.test.js, website/js/renderer.test.js using Vitest.\n\napi.test.js tests:\n- searchChunks with provenance=false calls POST /api/query with correct body\n- searchChunks with provenance=true calls POST /api/query-provable\n- fetchContextNav builds correct URL with query params\n- fetchZKProof calls POST /api/provenance/prove with correct body\n- Non-OK responses throw an error\n\nUse: import { vi } from 'vitest'; globalThis.fetch = vi.fn(); after each test reset with fetch.mockReset().\n\nstate.test.js tests:\n- setResults stores results and provenance flag\n- getChunkById returns correct chunk\n- cacheZkProof merges into existing cache entry\n- incrementLoadedDocCount returns new value\n- isProvenanceMode returns correct boolean\n\nrenderer.test.js tests:\n- buildDocGroupHtml with 1 doc + 2 passages returns HTML containing both passage cards\n- buildDocGroupHtml with empty passages returns empty string\n- buildPassageCard with zkProof containing proof_hex includes ZK button HTML\n- buildPassageCard with null zkProof does NOT include ZK button HTML\n- buildLoadMoreButton with 5 remaining includes '5 more documents'\n- escapeHtml escapes < > & \" correctly\n- extractPages returns array of page numbers from text\n\nUse Vitest. Config: website/js/vitest.config.js (or package.json with vitest config).\n\nInstall vitest as dev dependency if needed: npm install --save-dev vitest in website/js/.\n",
+      "acceptanceCriteria": [
+        "cd $REPO_DIR/website/js && npx vitest run --reporter=verbose 2>&1 | tail -20"
+      ],
+      "qualityChecks": [
+        "test -f $REPO_DIR/website/js/api.test.js",
+        "test -f $REPO_DIR/website/js/state.test.js",
+        "test -f $REPO_DIR/website/js/renderer.test.js"
+      ],
+      "priority": 4,
+      "passes": false,
+      "attempts": 0,
+      "dependsOn": ["WEBSITE-006"],
+      "dependencyPolicy": "block",
+      "contextFiles": [
+        "website/js/api.js (WEBSITE-001 output)",
+        "website/js/state.js (WEBSITE-002 output)",
+        "website/js/renderer.js (WEBSITE-003 output)"
+      ]
+    },
+    {
+      "id": "WEBSITE-008",
+      "title": "Write Playwright integration tests for load-more and provenance nav",
+      "description": "Current state: No Playwright tests for the website.\n\nWhat to build:\nCreate tests/test_website_integration.py with Playwright tests.\n\nRequirements:\n- Uses Playwright (python). Launches browser against the website served at http://127.0.0.1:80 (website is already served by OpenResty/nginx on port 80).\n- Before running tests, ensure the website and API are running. Tests can assume port 80 and 8100 are up.\n\ntests/test_website_integration.py:\n\ntest_load_more_button_appends_docs():\n1. Navigate to http://127.0.0.1:80/\n2. Type a query in search box and click Search (or press Enter)\n3. Wait for results to appear (.passage-card elements present)\n4. Count visible .document-header elements\n5. Click Load More button\n6. Wait for new cards\n7. Assert: total .document-header count increased by PAGE_SIZE (or remaining if fewer)\n8. Assert: first 3 doc headers still present (no reload)\n\ntest_provenance_nav_fetches_zk_proof():\n1. Search with provenance=true\n2. Wait for results with ZK buttons\n3. Click Next+Provenance on first card\n4. Wait for new card to appear\n5. Assert: new .zk-expand-btn is present on the new card\n\ntest_load_more_does_not_reload_existing_buttons():\n1. Search (not provenance)\n2. Click first ZK expand button (or wait for it — may not be present without provenance)\n3. Load More\n4. Assert: the first ZK expand button from step 2 is still functional (or absent if not provenance search)\n\ntest_zk_proof_download_button():\n1. Search with provenance\n2. Click ZK expand button on first result\n3. Verify submenu opens\n4. Click download button\n5. Verify download was triggered (check page triggered download)\n\nEach test: use playwright.sync_playwright() as context manager. Use page.goto(), page.fill(), page.click(), page.wait_for_selector(), page.wait_for_function().\n",
+      "acceptanceCriteria": [
+        "python3 -m pytest $REPO_DIR/tests/test_website_integration.py -v 2>&1 | tail -30"
+      ],
+      "qualityChecks": [
+        "test -f $REPO_DIR/tests/test_website_integration.py",
+        "grep -c 'def test_' $REPO_DIR/tests/test_website_integration.py"
+      ],
+      "priority": 4,
+      "passes": false,
+      "attempts": 0,
+      "dependsOn": ["WEBSITE-006"],
+      "dependencyPolicy": "block",
+      "contextFiles": [
+        "website/index.html (full — for understanding current UI structure)",
+        "website/js/app.js (WEBSITE-004 output)"
+      ]
+    }
+  ]
+}
