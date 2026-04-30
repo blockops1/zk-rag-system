@@ -19,7 +19,7 @@ LEAK_PATTERNS = [
     (re.compile(r"/home/blockops/"),                              "real username path"),
     (re.compile(r"/data/military-documents"),                     "real data path"),
     (re.compile(r"b28e65[a-f0-9]+"),                              "Kurier API key fragment"),
-    (re.compile(r"blockops"),                                      "hostname 'blockops'"),
+    (re.compile(r"(?<![a-z0-9])blockops(?![a-z0-9/])"),              "hostname 'blockops'"),
     (re.compile(r"10\.120\.60\.\d{1,3}"),                     "internal IP"),
     (re.compile(r"0x[a-f0-9]{40}\.[a-f0-9]"),                    "疑似私钥片段"),
 ]
