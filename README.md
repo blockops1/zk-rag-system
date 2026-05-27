@@ -48,12 +48,27 @@ PDF ──► A (fitz) ──► B (docling OCR) ──► D (chunk + embed + Qd
 
 ## Smart Contracts
 
+Deploy your own MerkleRootRegistry instance. The contract source is in `zk-rag-v2/pipeline_f/contracts/`.
+
+```bash
+cd zk-rag-v2/pipeline_f
+
+# Deploy to testnet
+source ../.env
+forge script script/DeployV2.s.sol --rpc-url $RPC_URL --broadcast --verify
+
+# Deploy to mainnet
+forge script script/DeployV2.s.sol --rpc-url $MAINNET_RPC_URL --broadcast --verify
+```
+
+After deployment, update `CONTRACT_ADDRESS` in `.env` with the new contract address.
+
+**Reference deployments (verify on [Horizen block explorer](https://horizen.calderaexplorer.xyz)):**
+
 | Network | Contract | Address |
 |---------|----------|---------|
 | Horizen Testnet | MerkleRootRegistry V1 | `0x83166A340c0A61bc836BD6383aD4acB23a3E3176` |
 | Horizen Mainnet | MerkleRootRegistry V2 | `0x462fc86E28c07798BD4656451611FE4E0A6D7760` |
-
-Both are publicly verifiable on the [Horizen block explorer](https://horizen.calderaexplorer.xyz).
 
 ---
 
@@ -226,7 +241,7 @@ data/                         ← Document corpus and runtime data (gitignored)
 1. **Add your PDFs** to `data/sourcePDF/` and register them in `data/registry.json`
 2. **Set `DEPLOYER_KEY`** in `.env` with a wallet funded for the target network
 3. **Run pipelines A → B → D → E → F in order** — each stage reads from the previous stage's output
-4. **Contract is already deployed** — the MerkleRootRegistry addresses above are live; no deployment needed
+3. **Deploy the MerkleRootRegistry contract** — see Smart Contracts section above
 
 ---
 
