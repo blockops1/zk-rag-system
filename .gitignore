@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Virtual environment
+.venv/
+
+# Data directories (user-provided corpus and runtime data)
+data/
+logs/
+zk_proofs/
+chunks/
+embeddings/
+merkle_trees/
+
+# IDE
+.vscode/
+.idea/
