@@ -5,7 +5,7 @@ Pipeline D — Chunk + Embed (OFFLINE ONLY — no Qdrant writes)
 Uses LlamaIndex HierarchicalNodeParser + SemanticDoubleMergingSplitterNodeParser
 for chunking, and mlx-embeddings + Qwen/Qwen3-Embedding-8B for embeddings.
 
-Reads page JSONs from ingested-vision/{doc_id}/ (or ingested/{doc_id}/ if vision is older),
+Reads page JSONs from ingested-vision/{doc_id}/ (),
 chunks them (via chunk_document.py) and embeds them to disk.
 
 Qdrant upsert is handled separately by Pipeline F — not this script.
@@ -30,15 +30,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 from chunk_document import _chunk_document
 
 # Paths
-V2_REGISTRY_FILE = Path("$DATA_DIR/registry.json")
-CHUNKS_DIR       = Path("$DATA_DIR/chunks")
-EMBEDDINGS_DIR   = Path("$DATA_DIR/embeddings")
-INGESTED_BASE    = Path("$DATA_DIR/extracted")
-VISION_BASE      = Path("$DATA_DIR/extracted-vision")
+V2_REGISTRY_FILE = Path("../data/registry.json")
+CHUNKS_DIR       = Path("../data/chunks")
+EMBEDDINGS_DIR   = Path("../data/embeddings")
+INGESTED_BASE    = Path("../data/extracted")
 
 EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-8B"
 
-LOCK_FILE = Path(os.getenv("LOCK_FILE", "$DATA_DIR/.lock.pipeline_d"))
+LOCK_FILE = Path(os.getenv("LOCK_FILE", "../data/.lock.pipeline_d"))
 
 
 def acquire_lock():
@@ -62,16 +61,11 @@ def load_v2_registry() -> dict:
 def pick_source_dir(doc_id: str) -> tuple[Path | None, str]:
     """Choose the best source for page JSONs.
 
-    Returns (source_dir, source_label).
-    Prefers ingested-vision/ if it exists — that means Pipeline C has already
-    run and added vision descriptions. Otherwise falls back to ingested/.
+    Returns (source_dir, source_label). Uses extracted/{doc_id}/.
     """
-    vision_dir    = VISION_BASE   / doc_id
     ingested_dir  = INGESTED_BASE / doc_id
 
-    if vision_dir.exists():
-        return (vision_dir, "ingested-vision")
-    elif ingested_dir.exists():
+    if ingested_dir.exists():
         return (ingested_dir, "ingested")
     else:
         return (None, None)
@@ -109,7 +103,7 @@ def embed_chunks(chunks_path: Path, out_dir: Path, model_name: str) -> tuple[int
 
 
 def process_doc(doc_id: str, dry_run: bool = False) -> dict:
-    """Process one doc through Pipeline D. Returns result dict."""
+    """Process one doc through Pipeline D — chunking only (D1), no embedding."""
     # Load registry entry
     registry = load_v2_registry()
     doc_entry = None
@@ -128,8 +122,7 @@ def process_doc(doc_id: str, dry_run: bool = False) -> dict:
     if not doc_entry:
         return {"status": "not_found", "doc_id": doc_id}
 
-    # Pick source (vision or plain) — same logic as chunk_document.py
-    source_dir, source_label = pick_source_dir(doc_id)
+        source_dir, source_label = pick_source_dir(doc_id)
     if source_dir is None:
         return {"status": "no_pages", "doc_id": doc_id}
 
@@ -144,19 +137,16 @@ def process_doc(doc_id: str, dry_run: bool = False) -> dict:
             "page_count": page_count,
         }
 
-    # Step 1: Chunk (delegated to chunk_document.py)
+    # Step 1: Chunk (delegated to chunk_document.py) — D1 complete
     chunk_result = _chunk_document(
         source_dir=source_dir,
         doc_id=doc_id,
         out_dir=CHUNKS_DIR,
     )
-    chunks_path = Path(chunk_result["chunks_path"])
 
-    # Step 2: Embed
-    embeddings_out_dir = EMBEDDINGS_DIR / doc_id
-    chunk_count, embedding_dim = embed_chunks(
-        chunks_path, embeddings_out_dir, EMBEDDING_MODEL
-    )
+
+    # Load chunk_count from result
+    chunk_count = chunk_result["chunk_count"]
 
     return {
         "status":      "ok",
@@ -180,9 +170,7 @@ def run_pipeline(doc_id_filter: str | None = None, dry_run: bool = False):
     candidates = []
     for doc in registry.get("documents", []):
         doc_id = doc.get("doc_id", "")
-        if not (INGESTED_BASE / doc_id / "pages").exists() and not (
-            VISION_BASE / doc_id / "pages"
-        ).exists():
+        if not (INGESTED_BASE / doc_id / "pages").exists():
             continue
         if doc_id_filter and doc_id != doc_id_filter:
             continue

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Shield background -->
+  <path d="M16 2 L28 7 L28 16 Q28 26 16 30 Q4 26 4 16 L4 7 Z" fill="#1a1a2e"/>
+  <!-- Gold border -->
+  <path d="M16 3.5 L27 8 L27 16 Q27 25 16 29 Q5 25 5 16 L5 8 Z" fill="none" stroke="#f0a500" stroke-width="1.2"/>
+  <!-- Star / check hybrid — ZK proof symbol -->
+  <path d="M16 8 L17.8 13.2 L23.5 13.2 L19.0 16.5 L20.8 21.7 L16 18.4 L11.2 21.7 L13.0 16.5 L8.5 13.2 L14.2 13.2 Z" fill="#f0a500"/>
+</svg>

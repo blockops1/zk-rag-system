@@ -84,21 +84,6 @@
     }
     .doc-links .search-btn:hover { background: #4a9fd9; }
     /* Source PDF download button */
-    .download-pdf-btn {
-      background: #2a5a3a;
-      color: #4ade80;
-      border: 1px solid #3a7a4a;
-      border-radius: 4px;
-      padding: 5px 12px;
-      font-size: 0.82em;
-      font-weight: 600;
-      cursor: pointer;
-      display: inline-block;
-      white-space: nowrap;
-    }
-    .download-pdf-btn:hover { background: #3a6a4a; }
-    .download-pdf-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-    .download-pdf-btn.loading { opacity: 0.7; cursor: wait; }
     footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #333; color: #888; font-size: 0.9em; }
     footer a { color: #64b5f6; }
     @media (max-width: 600px) {
@@ -126,17 +111,6 @@
       <a href="/">← Back to Search</a> · Military Doctrine RAG API
     </footer>
   </div>
-
-  <div id="paymentModal" class="decode-modal-overlay" style="display: none;">
-    <div class="decode-modal">
-      <button class="modal-close" id="paymentModalClose">✕</button>
-      <h3 id="paymentModalTitle">Download PDF — $0.10 USDC</h3>
-      <div id="paymentModalBody" style="margin-top:12px;">
-        <div style="color:#b0b0b0;text-align:center;padding:20px;">Loading…</div>
-      </div>
-    </div>
-  </div>
-
 
   <script>
     const API_BASE = window.location.protocol + '//' + window.location.host + '/api';
@@ -173,14 +147,12 @@
       panelsContainer.style.display = 'block';
 
       catalog.forEach((collection, idx) => {
-        // Tab button
         const tab = document.createElement('button');
         tab.className = 'tab' + (idx === 0 ? ' active' : '');
         tab.textContent = `${collection.name} (${collection.document_count})`;
         tab.addEventListener('click', () => switchTab(idx));
         tabsContainer.appendChild(tab);
 
-        // Panel
         const panel = document.createElement('div');
         panel.className = 'collection-panel' + (idx === 0 ? ' active' : '');
         panel.id = `panel-${idx}`;
@@ -205,6 +177,10 @@
               ? `<a href="https://archive.org/details/${escapeHtml(doc.ia_identifier)}" target="_blank">📄 View on Archive.org</a>`
               : '';
 
+            const searchBtn = doc.doc_id
+              ? `<a href="/docsearch.html?doc_id=${escapeHtml(doc.doc_id)}&collection=${escapeHtml(collection.name)}&title=${encodeURIComponent(doc.title || '')}&branch=${escapeHtml(collection.name)}" class="search-btn">🔍 Search within this document</a>`
+              : '';
+
             const metaParts = [];
             if (doc.category) metaParts.push(escapeHtml(doc.category));
             if (doc.pub_year) metaParts.push(String(doc.pub_year));
@@ -219,7 +195,7 @@
               </div>
               <div class="doc-links">
                 ${iaLink}
-                <button class="download-pdf-btn" data-doc-id="${escapeHtml(doc.doc_id)}" data-doc-title="${escapeHtml(doc.title)}">💰 Download PDF — $0.10</button>
+                ${searchBtn}
               </div>
             `;
             list.appendChild(card);
@@ -229,9 +205,6 @@
         panel.appendChild(list);
         panelsContainer.appendChild(panel);
       });
-
-      // Expose for inline onclick
-      window._switchTab = switchTab;
     }
 
     function switchTab(idx) {
@@ -242,221 +215,6 @@
         p.classList.toggle('active', i === idx);
       });
     }
-
-    // ─── X402 Paid PDF Download ─────────────────────────────────────────────────
-
-    async function fetchSourceInfo(docId) {
-      const resp = await fetch(`${API_BASE}/source/${encodeURIComponent(docId)}/info`);
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-        throw new Error(err.detail?.error || `HTTP ${resp.status}`);
-      }
-      return resp.json();
-    }
-
-    async function fetchSourcePdf(docId, paymentSignature) {
-      const headers = { 'Content-Type': 'application/json' };
-      if (paymentSignature) headers['Payment-Signature'] = paymentSignature;
-      const resp = await fetch(`${API_BASE}/source/${encodeURIComponent(docId)}`, { headers });
-      if (resp.status === 402) {
-        return { ok: false, blob: null, paymentRequired: true, error: 'Payment required' };
-      }
-      if (!resp.ok) {
-        return { ok: false, blob: null, paymentRequired: false, error: `HTTP ${resp.status}` };
-      }
-      const blob = await resp.blob();
-      return { ok: true, blob, contentType: resp.headers.get('Content-Type') || '', paymentRequired: false, error: null };
-    }
-
-    function showPaymentModal(html) {
-      const modal = document.getElementById('paymentModal');
-      const body = document.getElementById('paymentModalBody');
-      const title = document.getElementById('paymentModalTitle');
-      if (!modal || !body) return;
-      if (title) title.textContent = 'Download PDF — $0.10 USDC';
-      body.innerHTML = html;
-      modal.style.display = 'flex';
-    }
-
-    function hidePaymentModal() {
-      const modal = document.getElementById('paymentModal');
-      if (modal) modal.style.display = 'none';
-    }
-
-    function triggerDownload(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-    }
-
-    async function buildX402Payload(docId, sourceInfo) {
-      const now = Math.floor(Date.now() / 1000);
-      const validAfter = now - 60;
-      const validBefore = now + 300;
-      const nonce = Array.from({ length: 32 }, () => Math.floor(Math.random() * 256));
-      const nonceHex = '0x' + nonce.map(b => b.toString(16).padStart(2, '0')).join('');
-
-      const chainId = 8453; // Base mainnet
-
-      const fullMessage = {
-        types: {
-          EIP712Domain: [
-            { name: 'name', type: 'string' },
-            { name: 'version', type: 'string' },
-            { name: 'chainId', type: 'uint256' },
-            { name: 'verifyingContract', type: 'address' },
-          ],
-          TransferWithAuthorization: [
-            { name: 'from', type: 'address' },
-            { name: 'to', type: 'address' },
-            { name: 'value', type: 'uint256' },
-            { name: 'validAfter', type: 'uint256' },
-            { name: 'validBefore', type: 'uint256' },
-            { name: 'nonce', type: 'bytes32' },
-          ],
-        },
-        primaryType: 'TransferWithAuthorization',
-        domain: {
-          name: 'USD Coin',
-          version: '2',
-          chainId,
-          verifyingContract: sourceInfo.asset,
-        },
-        message: {
-          from: null,
-          to: sourceInfo.pay_to,
-          value: BigInt(sourceInfo.price_micro_usdc),
-          validAfter,
-          validBefore,
-          nonce: nonceHex,
-        },
-      };
-
-      return { fullMessage, message: fullMessage.message, validAfter, validBefore, nonceHex };
-    }
-
-    async function handleSourceDownload(docId, title) {
-      let sourceInfo;
-      try {
-        sourceInfo = await fetchSourceInfo(docId);
-      } catch (err) {
-        alert('Could not load document info: ' + err.message);
-        return;
-      }
-
-      const result = await fetchSourcePdf(docId);
-      if (result.ok) {
-        triggerDownload(result.blob, sourceInfo.filename || `${title || 'document'}.pdf`);
-        return;
-      }
-      if (!result.paymentRequired) {
-        alert('Download failed: ' + result.error);
-        return;
-      }
-
-      showPaymentModal(`
-        <div style="text-align:center;padding:10px 0;">
-          <div style="font-size:1.2em;color:#fff;margin-bottom:8px;">$${sourceInfo.price_usd} USDC</div>
-          <div style="color:#888;font-size:0.9em;margin-bottom:20px;">
-            Pay to download <strong style="color:#e0e0e0;">${escapeHtml(sourceInfo.title || title || 'this document')}</strong>
-          </div>
-          <div style="color:#888;font-size:0.85em;margin-bottom:20px;">
-            Network: Base · Asset: USDC<br>
-            Recipient: ${escapeHtml(sourceInfo.pay_to)}
-          </div>
-          <button id="payUsdcBtn" class="download-pdf-btn" style="font-size:1em;padding:10px 24px;">
-            💰 Pay $${sourceInfo.price_usd} with MetaMask
-          </button>
-          <div id="payError" style="color:#ff8a8a;margin-top:12px;font-size:0.9em;display:none;"></div>
-        </div>
-      `);
-
-      document.getElementById('payUsdcBtn')?.addEventListener('click', async () => {
-        const btn = document.getElementById('payUsdcBtn');
-        const errEl = document.getElementById('payError');
-        if (!btn) return;
-        btn.disabled = true;
-        btn.textContent = 'Waiting for wallet…';
-        if (errEl) errEl.style.display = 'none';
-
-        try {
-          if (!window.ethereum) {
-            throw new Error('MetaMask not found. Please install MetaMask to pay for downloads.');
-          }
-          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-          const from = accounts[0];
-
-          const { fullMessage, validAfter, validBefore, nonceHex } = await buildX402Payload(docId, sourceInfo);
-          fullMessage.message.from = from;
-
-          const signature = await window.ethereum.request({
-            method: 'eth_signTypedData_v4',
-            params: [from, JSON.stringify(fullMessage)],
-          });
-
-          const payload = {
-            x402Version: 2,
-            resource: {
-              url: `${window.location.protocol}//${window.location.host}/api/source/${docId}`,
-              description: `Full PDF download: ${sourceInfo.title || title || 'document'}`,
-              mimeType: 'application/pdf',
-            },
-            accepted: {
-              scheme: 'exact',
-              network: 'eip155:8453',
-              amount: String(sourceInfo.price_micro_usdc),
-              asset: sourceInfo.asset,
-              payTo: sourceInfo.pay_to,
-              maxTimeoutSeconds: 300,
-              extra: { assetTransferMethod: 'eip3009', name: 'USD Coin', version: '2' },
-            },
-            payload: {
-              signature,
-              authorization: { from, to: sourceInfo.pay_to, value: String(sourceInfo.price_micro_usdc), validAfter: String(validAfter), validBefore: String(validBefore), nonce: nonceHex },
-            },
-          };
-
-          const encoder = new TextEncoder();
-          const paymentSignature = btoa(String.fromCharCode(...encoder.encode(JSON.stringify(payload))));
-
-          btn.textContent = 'Verifying payment…';
-          const retryResult = await fetchSourcePdf(docId, paymentSignature);
-          if (retryResult.ok) {
-            hidePaymentModal();
-            triggerDownload(retryResult.blob, sourceInfo.filename || `${title || 'document'}.pdf`);
-          } else {
-            throw new Error(retryResult.error || 'Payment verification failed');
-          }
-        } catch (err) {
-          if (errEl) { errEl.textContent = err.message || 'Payment failed'; errEl.style.display = 'block'; }
-          if (btn) { btn.disabled = false; btn.textContent = '💰 Pay $0.10 with MetaMask'; }
-        }
-      });
-    }
-
-    // Delegated click handler for download buttons
-    document.addEventListener('click', (e) => {
-      if (e.target.classList.contains('download-pdf-btn')) {
-        const btn = e.target;
-        const docId = btn.dataset.docId;
-        const docTitle = btn.dataset.docTitle || 'document';
-        if (docId) handleSourceDownload(docId, docTitle);
-      }
-    });
-
-    // Payment modal close
-    document.getElementById('paymentModalClose')?.addEventListener('click', () => {
-      const m = document.getElementById('paymentModal');
-      if (m) m.style.display = 'none';
-    });
-    document.getElementById('paymentModal')?.addEventListener('click', (e) => {
-      if (e.target.id === 'paymentModal') document.getElementById('paymentModal').style.display = 'none';
-    });
 
     init();
   </script>

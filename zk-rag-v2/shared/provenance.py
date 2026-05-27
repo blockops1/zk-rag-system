@@ -21,7 +21,7 @@ Environment:
     KURIE_API_BASE      Kurier API base URL (default: https://api.kurier.xyz/api/v1)
 
 Paths:
-    PROVE_BINARY   $REPO_DIR/zk-circuit/target/release/prove-bin
+    PROVE_BINARY   ./zk-circuit/target/release/prove-bin
 
 Qdrant payload fields used for proof inputs:
     merkle_leaf_hash, merkle_leaf_index, merkle_tree_depth, merkle_siblings,
@@ -48,15 +48,14 @@ from typing import Optional
 # All paths are configurable via environment variables so the same code
 # works on R730 (defaults below) and VPS (overridden in systemd service file).
 
-import os
 
-PROVE_BINARY      = Path(os.environ.get("ZK_PROVE_BINARY",      "$REPO_DIR/zk-circuit/target/release/prove-bin"))
-MERKLE_TREES_DIR  = Path(os.environ.get("ZK_MERKLE_TREES_DIR",  "$DATA_DIR/merkle_trees"))
-CHUNKS_DIR        = Path(os.environ.get("ZK_CHUNKS_DIR",          "$DATA_DIR/chunks"))
+PROVE_BINARY      = Path(os.environ.get("ZK_PROVE_BINARY",      "./zk-circuit/target/release/prove-bin"))
+MERKLE_TREES_DIR  = Path(os.environ.get("ZK_MERKLE_TREES_DIR",  "../data/merkleTrees"))
+CHUNKS_DIR        = Path(os.environ.get("ZK_CHUNKS_DIR",          "../data/chunks"))
 PROOFS_TMP_DIR    = Path(os.environ.get("ZK_PROOFS_TMP_DIR",     "/tmp/zk_proofs"))
-PROOFS_DIR        = Path(os.environ.get("ZK_PROOFS_DIR",          "$DATA_DIR/zk_proofs"))
-LOG_DIR           = Path(os.environ.get("ZK_LOG_DIR",             "$DATA_DIR/logs"))
-REGISTRY_PATH     = Path(os.environ.get("ZK_REGISTRY_PATH",      "$DATA_DIR/registry.json"))
+PROOFS_DIR        = Path(os.environ.get("ZK_PROOFS_DIR",          "../data/zk_proofs"))
+LOG_DIR           = Path(os.environ.get("ZK_LOG_DIR",             "../data/logs"))
+REGISTRY_PATH     = Path(os.environ.get("ZK_REGISTRY_PATH",      "../data/registry.json"))
 
 PROOFS_TMP_DIR.mkdir(parents=True, exist_ok=True)
 PROOFS_DIR.mkdir(parents=True, exist_ok=True)
@@ -244,7 +243,7 @@ def generate_proof_from_payload(chunk_id: str, payload: dict) -> dict:
         payload: The Qdrant point payload dict for this chunk
 
     Returns:
-        dict with proof_hex, public_inputs_hex, vk_hex, public_inputs
+        dict with proof_hex, public_inputs_hex, vk_hex, public_inputs, kurier_job_id
 
     Raises:
         RuntimeError: if prove binary fails
@@ -327,9 +326,23 @@ def generate_proof_from_payload(chunk_id: str, payload: dict) -> dict:
     except json.JSONDecodeError as e:
         raise RuntimeError(f"prove binary output is not valid JSON: {e}\noutput: {output_text[:500]}")
 
+    # Submit proof to Kurier (zkVerify) — this is what makes the badge go from "not verified" to "submitted"
+    kurier_job_id = None
+    try:
+        kurier_job_id = submit_proof_to_zkverify(
+            proof_hex=result.get("proof_hex", ""),
+            public_inputs_hex=result.get("public_inputs_hex", ""),
+            vk_hex=result.get("vk_hex", ""),
+            vk_id=None,
+        )
+        result["kurier_job_id"] = kurier_job_id
+        log_info("Proof submitted to Kurier", chunk_id=chunk_id, kurier_job_id=kurier_job_id)
+    except Exception as e:
+        log_warn("Failed to submit proof to Kurier", chunk_id=chunk_id, error=str(e))
+
     # Save proof to disk for audit trail
     try:
-        save_proof_payload(chunk_id, doc_id, leaf_index, tree_depth, merkle_root, ingestion_block, result)
+        save_proof_payload(chunk_id, doc_id, leaf_index, tree_depth, merkle_root, ingestion_block, result, kurier_job_id=kurier_job_id)
     except Exception as e:
         log_warn("Failed to save proof to disk", chunk_id=chunk_id, error=str(e))
 
@@ -338,6 +351,7 @@ def generate_proof_from_payload(chunk_id: str, payload: dict) -> dict:
         "public_inputs_hex": result.get("public_inputs_hex", ""),
         "vk_hex": result.get("vk_hex", ""),
         "public_inputs": result.get("public_inputs", {}),
+        "kurier_job_id": kurier_job_id,
     }
 
 
@@ -748,7 +762,7 @@ def poll_zkverify_job(job_id: str, poll_interval: int = 10, max_wait: int = 300)
 
 # ── Emit tx lookup ────────────────────────────────────────────────────────────
 
-REGISTRY_PATH = Path("$DATA_DIR/registry.json")
+REGISTRY_PATH = Path("../data/registry.json")
 
 # Contract address on Sepolia (from SECTION-zk-circuit-02-implementation.md)
 DEFAULT_CONTRACT = "0x17A6E8AE3f6eb315F4C117630F3AaC8865BD2B15"

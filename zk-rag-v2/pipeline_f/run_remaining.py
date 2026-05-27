@@ -8,8 +8,8 @@ import os
 import time
 from pathlib import Path
 
-REGISTRY_PATH = Path("$DATA_DIR/registry.json")
-MERKLE_DIR    = Path("$DATA_DIR/merkle_trees")
+REGISTRY_PATH = Path("../data/registry.json")
+MERKLE_DIR    = Path("../data/merkleTrees")
 LOG_DIR       = Path("/data/logs")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -31,7 +31,7 @@ def log_err(msg):
 
 def get_nonce():
     out = subprocess.run(
-        ["$FOUNDRY_BIN/cast", "nonce", "0xBABc60eD17e6387AEDab112E80744aA19EFCb723",
+        ["./foundry-bin/cast", "nonce", "0xBABc60eD17e6387AEDab112E80744aA19EFCb723",
          "--rpc-url", "https://horizen.calderachain.xyz/http"],
         capture_output=True, text=True, timeout=10
     )
@@ -95,7 +95,7 @@ for run_idx, run in enumerate(runs):
     env["RPC_URL"]            = RPC
 
     cmd = [
-        "$FOUNDRY_BIN/forge", "script",
+        "./foundry-bin/forge", "script",
         "script/CommitBatchV2.s.sol:CommitBatchV2",
         "--rpc-url", RPC,
         "--chain-id", CHAIN_ID,
@@ -108,7 +108,7 @@ for run_idx, run in enumerate(runs):
 
     result = subprocess.run(
         cmd, env=env,
-        cwd="$REPO_DIR/pipeline_f",
+        cwd="./pipeline_f",
         capture_output=True, text=True, timeout=300
     )
 
@@ -118,7 +118,7 @@ for run_idx, run in enumerate(runs):
 
     if result.returncode == 0:
         # Parse tx hash from broadcast receipt
-        bc_dir = Path("$REPO_DIR/pipeline_f/broadcast/CommitBatchV2.s.sol/") / CHAIN_ID
+        bc_dir = Path("./pipeline_f/broadcast/CommitBatchV2.s.sol/") / CHAIN_ID
         try:
             files = sorted(bc_dir.glob("run-*.json"), key=os.path.getmtime)
             if files:
@@ -140,7 +140,7 @@ for run_idx, run in enumerate(runs):
 
         # Update registry for each doc in this run
         import fcntl
-        lock_fd = open("$DATA_DIR/registry.lock", "w")
+        lock_fd = open("../data/registry.lock", "w")
         fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
         try:
             reg2 = json.load(open(REGISTRY_PATH))

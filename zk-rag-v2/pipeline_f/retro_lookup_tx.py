@@ -48,15 +48,15 @@ from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
-REGISTRY_PATH = Path("$DATA_DIR/registry.json")
-LOG_DIR       = Path("$DATA_DIR/logs")
+REGISTRY_PATH = Path("../data/registry.json")
+LOG_DIR       = Path("../data/logs")
 SCRIPT_DIR     = Path(__file__).parent
 
 # ── RPC config ────────────────────────────────────────────────────────────────
 
 DEFAULT_RPC = "https://horizen-testnet.rpc.caldera.xyz"
 CHAIN_ID    = 2651420          # testnet; change to 26514 for mainnet
-EMITTER_ADDR = "YOUR_WALLET_ADDRESS"  # uploader address
+EMITTER_ADDR = "0xbabc60ed17e6387aedab112e80744aa19efcb723"  # uploader address
 CONTRACT_ADDR = "0x17a6e8ae3f6eb315f4c117630f3aac8865bd2b15"  # AppendRoot contract
 
 # AppendRoot.appendRoot signature: 0x42d28b24

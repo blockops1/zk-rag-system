@@ -1,10 +1,10 @@
 # ZK-RAG v2 — Project Plan
 
-**Date**: 2026-04-28
-**Status**: IN PROGRESS
+**Date**: 2026-05-19
+**Status**: COMPLETE — 527 docs on-chain, ingested, all titles approved
 **Canonical directories**:
-- Scripts: `$REPO_DIR/` — all pipeline scripts, tests, contracts
-- Production data + logs: `$DATA_DIR/` — chunks, embeddings, merkle_trees, registry, logs
+- Scripts: `./` — all pipeline scripts, tests, contracts
+- Production data + logs: `.<DATA>/` — chunks, embeddings, merkleTrees, registry, logs
 
 ---
 
@@ -12,21 +12,21 @@
 
 | Pipeline | Name | Script Location | Status | Notes |
 |----------|------|----------------|--------|-------|
-| A | fitz extract | `pipeline_a/` | PARTIAL | Has harvest.sh, pdf_eval.py, pdf_processing.py. No run_pipeline_a.sh runner. |
-| B | docling OCR | `pipeline_b/` | DONE | run_pipeline_b.sh exists, LOG_DIR needs updating |
-| C | SmolVLM2 vision | `pipeline_c/` | DONE | run_pipeline_c.sh exists, LOG_DIR needs updating |
-| D | Chunk + Embed | `pipeline_d/` | PARTIAL | chunk_document.py + embed_docs_cpu.py present. No run_pipeline_d.sh runner. |
-| E | Merkle trees | `pipeline_e/` | ✅ DONE | Rust binary. 604/604 docs have trees. Output: `merkle_root` single HashOut. |
-| F | EVM emit | `pipeline_f/` | ✅ DONE — ALL 604 ON-CHAIN | emit_all.py network-aware. All 604 emitted to mainnet V2. Registry fully in sync (604/604 emitted_mainnet SET). |
-| G | Qdrant upsert | `pipeline_g/` | ✅ DONE | 4 collections. Needs re-ingest for newly emitted docs. |
+| A | fitz extract | `pipeline_a/` | ✅ DONE | Single-threaded fitz, one PNG/page, upright rendering. |
+| B | docling OCR | `pipeline_b/` | ✅ DONE | |
+| C | SmolVLM2 vision | `pipeline_c/` | ✅ DONE | Vision descriptions written in-place to page JSONs. |
+| D | Chunk + Embed | `pipeline_d/` | ✅ DONE | D1: LlamaIndex HierarchicalNodeParser. D2: fastembed + NomicEmbedText-v1.5 (768d). |
+| E | Merkle trees | `pipeline_e/` | ✅ DONE | Single-root PoseidonHash. |
+| F | EVM emit | `pipeline_f/` | ✅ DONE — ALL 527 ON-CHAIN | V3 mainnet `0x462fc86E28c07798BD4656451611FE4E0A6D7760`. |
+| G | Qdrant upsert | `pipeline_g/` | ✅ DONE — 527/527 INGESTED | Fresh Qdrant DB. Batched upserts. |
 
-**Registry**: 604 docs total | 604/604 emitted to mainnet V2 (`0x462fc86...`) | all 604 with `emitted_mainnet` SET (real tx hashes) | 0 remaining
+**Registry**: 527 total | 527 ingested | 527 emitted_mainnet | all pipeline_e complete | all has_embeddings | all title_status=approved
 
 ---
 
 ## `.env` Network Configuration
 
-**Location:** `$REPO_DIR/.env`
+**Location:** `./.env`
 
 ```bash
 ACTIVE_NETWORK=mainnet          # flip to "testnet" for testnet
@@ -44,7 +44,7 @@ MAINNET_CONTRACT_ADDRESS=0x462fc86E28c07798BD4656451611FE4E0A6D7760
 MAINNET_EXPLORER=https://horizen.calderaexplorer.xyz
 ```
 
-**Usage:** `source $REPO_DIR/.env && python3 emit_all.py --batch --limit N`
+**Usage:** `source ./.env && python3 emit_all.py --batch --limit N`
 
 The script reads `ACTIVE_NETWORK` and auto-selects `CHAIN_ID`, `RPC_URL`, `CONTRACT_ADDRESS`, `EXPLORER_URL`. No per-run env var passing needed.
 
@@ -53,7 +53,7 @@ The script reads `ACTIVE_NETWORK` and auto-selects `CHAIN_ID`, `RPC_URL`, `CONTR
 ## Architecture
 
 ```
-PDF (source_pdfs/)
+PDF (sourcePDF/)
     │
     ├─── Pipeline A: fitz text extraction
     │       Output: extracted/{doc_id}/pages/*.json
@@ -69,18 +69,19 @@ PDF (source_pdfs/)
     │              embeddings/{doc_id}/embeddings.npy (1024-dim, Qwen3-Embedding-0.6B)
     │
     ├─── Pipeline E: Merkle trees (Rust) — SINGLE ROOT
-    │       Output: merkle_trees/{doc_id}_tree.json
+    │       Output: merkleTrees/{doc_id}_tree.json
     │       Note: per-document Merkle tree with single Poseidon root (not cap)
     │
 ||    ├─── Pipeline F: EVM emit — SINGLE ROOT
-||    │       Input: merkle_trees/
+||    │       Input: merkleTrees/
 ||    │       Output: emit_output/{doc_id}.json (on-chain tx)
 ||    │       Mainnet V2: `0x462fc86E28c07798BD4656451611FE4E0A6D7760` — 604/604 docs emitted ✅
     │
-    ├─── Pipeline G: Qdrant upsert — SINGLE ROOT
-    │       Input: chunks/ + embeddings/ + merkle_trees/ + emit_output/
-    │       Output: Qdrant collections (army, navy, marines, air_force, coast_guard, other)
+|    ├─── Pipeline G: Qdrant upsert — SINGLE ROOT
+    │       Input: chunks/ + embeddings/ + merkleTrees/ + emit_output/
+    │       Output: Qdrant collections (army, navy, marines, other)
     │       HARD RULE: Only Pipeline G touches Qdrant.
+    │       Note: Fresh Qdrant DB built 2026-05-18 with 527 docs.
     │
     └─── Query Services (two-process design)
             │
@@ -131,14 +132,14 @@ sudo systemctl restart zk-rag-api
 
 Qdrant has been moved to `/data/qdrant/database/`. Pipeline log migration is incomplete.
 
-- [ ] **T-10**: Fix `run_pipeline_b.sh` LOG_DIR: `$REPO_DIR/logs` → `$DATA_DIR/logs`
-- [ ] **T-11**: Fix `run_pipeline_c.sh` LOG_DIR: `$REPO_DIR/logs` → `$DATA_DIR/logs`
-- [ ] **T-12**: Fix `run_pipeline_e.sh` LOG_DIR: `$REPO_DIR/logs` → `$DATA_DIR/logs` (+ fix BINARY and OUT_DIR paths)
+- [ ] **T-10**: Fix `run_pipeline_b.sh` LOG_DIR: `./rag/logs` → `.<DATA>/logs`
+- [ ] **T-11**: Fix `run_pipeline_c.sh` LOG_DIR: `./rag/logs` → `.<DATA>/logs`
+- [ ] **T-12**: Fix `run_pipeline_e.sh` LOG_DIR: `./rag/logs` → `.<DATA>/logs` (+ fix BINARY and OUT_DIR paths)
 - [ ] **T-13**: Find or create `run_pipeline_d.sh` (currently only in `archive/`)
 - [ ] **T-14**: Find or create `run_pipeline_a.sh`
-- [ ] **T-16**: Create `run_pipeline_g.sh` with `LOG_DIR="$DATA_DIR/logs"`
+- [ ] **T-16**: Create `run_pipeline_g.sh` with `LOG_DIR=".<DATA>/logs"`
 - [ ] **T-19**: Archive stale `/data/rag/qdrant_data/` after confirming nothing needed
-- [ ] **T-20**: Archive stale `$REPO_DIR/qdrant_data/`
+- [ ] **T-20**: Archive stale `./rag/qdrant_data/`
 - [ ] **T-21**: Update `docs/admin.md` with correct paths
 
 ### Pipeline C — Vision Image Extraction Review (TODO: 2026-04-22)
@@ -146,7 +147,7 @@ Qdrant has been moved to `/data/qdrant/database/`. Pipeline log migration is inc
 **Risk identified:** Image-to-page association may be broken — could require full re-extraction of all images.
 
 **What Pipeline C does:**
-1. `extract_images.py` — runs once, extracts images from PDFs via PyMuPDF, writes to `$DATA_DIR/images/{doc_id}/manifest.json` + `page_NNNN_img_00.{png|jpg}`
+1. `extract_images.py` — runs once, extracts images from PDFs via PyMuPDF, writes to `.<DATA>/images/{doc_id}/manifest.json` + `page_NNNN_img_00.{png|jpg}`
 2. `batch_image_describe.py` — runs per-doc, copies from `extracted/` to `extracted-vision/`, finds images via `page_{page_num:04d}_img_00.png` (hardcoded), calls SmolVLM2
 3. `reingest_vision.py` — reads from `extracted-vision/`, writes descriptions back into page JSONs, re-chunks and re-embeds
 
@@ -180,7 +181,7 @@ Qdrant has been moved to `/data/qdrant/database/`. Pipeline log migration is inc
 - [x] `build_from_hashed_leaves()` + `build_single_root()` + `get_merkle_proof()` + `compute_root_from_proof()` added to `circuit/src/merkle_tree.rs`
 - [x] `pub mod merkle_tree` exported from `circuit/src/lib.rs`
 - [x] Binary rebuilt: `zk-circuit/target/debug/pipeline_e`
-- [x] Ran on 5 docs (2026-04-20): trees written to `$DATA_DIR/merkle_trees/`
+- [x] Ran on 5 docs (2026-04-20): trees written to `.<DATA>/merkleTrees/`
 
 **ZK proof generation — COMPLETE 2026-04-20:**
 - [x] `test-from-chunks` binary built — loads real chunks, rebuilds identical Merkle tree, generates plonky2 ZK proof, verifies it
@@ -189,7 +190,7 @@ Qdrant has been moved to `/data/qdrant/database/`. Pipeline log migration is inc
 - [x] Shared `MerkleTree::build_from_hashed_leaves()` used by both Pipeline E and test-from-chunks
 - [x] `chunk_hash` is a PUBLIC INPUT — verifier can independently confirm chunk matches
 - [x] All 5 documents tested: roots and depths MATCH Pipeline E trees exactly
-- [x] ZK proofs saved to `$DATA_DIR/zk_proofs/zk_proof_<doc_id>_<chunk>.json`
+- [x] ZK proofs saved to `.<DATA>/zk_proofs/zk_proof_<doc_id>_<chunk>.json`
 
 **Pre-built circuits — COMPLETE 2026-04-21 (Phase J):**
 - [x] `prove-bin --build-circuit <depth>` serializes `CircuitData` to `circuit_depth{N}.bin`
@@ -201,14 +202,34 @@ Qdrant has been moved to `/data/qdrant/database/`. Pipeline log migration is inc
 
 | Pipeline G — Qdrant Upsert
 
-**Status (2026-04-27):** Full dataset re-ingest complete. R730 Qdrant now holds 172,624 total points (chunks) across all 4 collections: army (90,250), navy (57,094), marines (11,296), other (13,984). VPS Qdrant rebuilt separately with ~594 docs.
+**Status (2026-04-27):** Full dataset re-ingest complete. R730 Qdrant holds 172,624 total points across 4 collections: army (84,654), navy (50,709), marines (9,728), other (12,592). VPS Qdrant rebuilt separately with ~594 docs.
 
 **All 604 docs emitted to mainnet V2.** Qdrant is now in sync with emitted docs.
 
-- [x] Qdrant moved to `$DATA_DIR/qdrant/` (fresh directory, 2026-04-17)
-- [x] Logging added to pipeline_g.py (`$DATA_DIR/logs/pipeline_g.log`)
-- [x] API server updated to use `QdrantClient(path="$DATA_DIR/qdrant")`
+- [x] Qdrant moved to `.<DATA>/qdrant/` (fresh directory, 2026-04-17)
+- [x] Logging added to pipeline_g.py (`.<DATA>/logs/pipeline_g.log`)
+- [x] API server updated to use `QdrantClient(path=".<DATA>/qdrant")`
 - [x] **Pipeline G re-ingest complete** — full 172,624-point dataset in R730 Qdrant
+
+### Title Review — COMPLETED 2026-05-19 ✅
+
+**Final state**: 527 approved documents. 18 documents deleted during review (blank/garbled OCR, non-military content, duplicates). Pipeline H title review complete — no further batches.
+
+**Data sources**:
+- Current title → **Qdrant** (payload `title` field)
+- Chunk 0 text → **Local disk** at `.<DATA>/chunks/{doc_id}/chunks.jsonl` (first line = chunk_index 0)
+
+**Status (2026-05-XX)**:
+- Batch 1 (docs 1-50) → `./title_review_batch_1.md` — **PENDING REVIEW**
+- Remaining: ~536 docs in batches of 50 (~11 more batches)
+
+**Hard rules**:
+- Never bulk-sync titles — only scroll-by-doc_id + `set_payload` per doc
+- Apply DELETES before title updates
+- Full doc_id in all output (no truncation)
+- Delete criterion: page 1 blank/cancelled/placeholder AND title is garbage
+
+**Apply script pattern**: see `zk-rag-registry-title-fix` skill.
 
 ### Contract — V2 Rewrite with ZK Fields (DEPLOYED TESTNET 2026-04-24)
 
@@ -263,7 +284,7 @@ Qdrant has been moved to `/data/qdrant/database/`. Pipeline log migration is inc
 ## Canonical Directory Map
 
 ```
-$REPO_DIR/          ← Scripts (git repo)
+./          ← Scripts (git repo)
   pipeline_a/                      ← A: harvest, ingest, pdf processing
   pipeline_b/                      ← B: docling loop
   pipeline_c/                      ← C: SmolVLM2 vision
@@ -281,18 +302,18 @@ $REPO_DIR/          ← Scripts (git repo)
   shared/                          ← api_server.py, batch_ingest_branch.py, etc.
   zk-circuit/                     ← ZK circuit (Rust)
 
-$DATA_DIR/           ← Production data
-  source_pdfs/                     ← Source PDFs
+.<DATA>/           ← Production data
+  sourcePDF/                     ← Source PDFs
   extracted/                       ← A + B output (page JSONs)
   extracted-vision/                ← C output (page JSONs + vision_description)
   chunks/                          ← D output: chunks.jsonl per doc
   embeddings/                      ← D output: embeddings.npy per doc (1024-dim)
-  merkle_trees/                    ← E output: *_tree.json per doc
-|  registry.json                    ← Registry (604 docs)
+  merkleTrees/                    ← E output: *_tree.json per doc
+  registry.json                    ← Registry (527 docs)
   logs/                            ← All pipeline logs
 
-$DATA_DIR/qdrant/     ← Qdrant vector DB (fresh, 2026-04-17)
-$DATA_DIR/logs/       ← All pipeline logs
+.<DATA>/qdrant/     ← Qdrant vector DB (fresh, 2026-04-17)
+.<DATA>/logs/       ← All pipeline logs
 ```
 
 ---
@@ -307,7 +328,7 @@ $DATA_DIR/logs/       ← All pipeline logs
 - `GET /api/context` ✅ — restored 2026-04-28 (was accidentally deleted during X402 rewrite)
 - `POST /api/query` (vector + hybrid) ✅
 - **Provenance endpoints**: emit_tx read from registry ✅, ZK proof generation ~11ms ✅
-- **Full dataset in R730 Qdrant**: 172,624 points across 4 collections (army 92,436, navy 57,730, marines 11,296, other 13,984)
+- **Full dataset in R730 Qdrant**: 172,624 points across 4 collections (army 84,654, navy 50,709, marines 9,728, other 12,592)
 - **Auto-submit to Kurier on prove** ✅ — `kurier_job_id` returned in prove response
 - **Auto-poll from website** ✅ — both nav buttons and expand button trigger polling
 - **VPS Qdrant**: ~594 docs rebuilt from R730 data
@@ -320,7 +341,7 @@ $DATA_DIR/logs/       ← All pipeline logs
 
 **Phase 2: ZK Proof of Provenance — IN PROGRESS**
 - Build ZK bridge: Rust prove binary + Python wrapper ✅
-- Merkle proof retrieval from `merkle_trees/` JSON files ✅
+- Merkle proof retrieval from `merkleTrees/` JSON files ✅
 - Pre-built circuit files (Phase J ✅) — provenance uses them (~11ms per proof) ✅
 - Kurier submission ✅ (tested end-to-end)
 - Emit tx lookup from registry ✅ (604/604 emitted docs have tx_hash in registry)
@@ -361,7 +382,7 @@ $DATA_DIR/logs/       ← All pipeline logs
 **Running Tests — CORRECT INVOCATION**
 Tests require the project's venv Python, NOT the hermes agent venv:
 ```bash
-cd $REPO_DIR && PYTHONPATH=$REPO_DIR $REPO_DIR/venv/bin/python3 -m pytest tests/ -v
+cd ./zk-rag-v2 && PYTHONPATH=./zk-rag-v2 ./.venv/bin/python3 -m pytest tests/ -v
 ```
 Test files that error on import: `shared/test_amcp.py` (missing `pdf_processing` module), `shared/test_pending_check.py` (requires absent PDF) — predate current project structure, not runnable.
 
@@ -719,7 +740,7 @@ The original design used a MerkleCap (16 cap entries at height 4) with `RandomAc
 - All hashing imported from `zk_circuit::merkle_tree` — NFKC normalization, 8-byte packing, Poseidon
 - `chunk_hash` is PUBLIC INPUT — verifier can independently confirm chunk matches
 - 5/5 docs tested: merkle_root and depth MATCH Pipeline E trees exactly
-- ZK proofs saved: `$DATA_DIR/zk_proofs/zk_proof_<doc_id>_<chunk>.json`
+- ZK proofs saved: `.<DATA>/zk_proofs/zk_proof_<doc_id>_<chunk>.json`
 
 **Phase G-2 — Kurier/zkVerify Submission (COMPLETE 2026-04-21):**
 - `zk-circuit/kurier_submit.py` — Python CLI for submitting plonky2 proofs to Kurier/zkVerify
@@ -750,7 +771,7 @@ Key gaps identified in Phase 1 code that v2 fixes:
 
 **Output:** `mil-docs-pipelines/PRD-zk-rag-v2.md` — full v2 specification
 **Working codebase:** `mil-docs-pipelines/zk-rag-v2/` (exact copy of Phase 1 working codebase)
-**Original codebase:** `$REPO_DIR/scripts/zk-rag/` — untouched, 39/39 tests passing
+**Original codebase:** `./rag/scripts/zk-rag/` — untouched, 39/39 tests passing
 
 ---
 
@@ -790,10 +811,10 @@ Key gaps identified in Phase 1 code that v2 fixes:
 **Problem:** Registry showed `has_merkle_tree=true` for 691 docs but only 5 tree JSON files existed on disk. Registry was out of sync with actual files.
 
 **Actions:**
-1. Archived 5 existing tree JSONs → `/data/archive/merkle_trees/`
+1. Archived 5 existing tree JSONs → `/data/archive/merkleTrees/`
 2. Reset `has_merkle_tree=false` for all 696 docs in registry
 3. Ran Pipeline E fresh on 5 docs → rebuilt trees to disk
-4. Ran `sync_registry_merkle_trees.py --doc-id <id> --no-backup` for each → registry correctly synced
+4. Ran `sync_registry_merkleTrees.py --doc-id <id> --no-backup` for each → registry correctly synced
 
 **Pipeline E output (5 docs):**
 
@@ -807,7 +828,7 @@ Key gaps identified in Phase 1 code that v2 fixes:
 
 **Leaf[0] = doc_id:** Pipeline E prepends `PoseidonHash(doc_id_bytes)` as leaf[0]. The doc_id is the 64-char hex string (SHA-256 of PDF bytes). Text chunks at indices 1..N.
 
-**`sync_registry_merkle_trees.py` updated:** Added `tree_depth` sync from `tree_config.depth` (nested path). Previously missed.
+**`sync_registry_merkleTrees.py` updated:** Added `tree_depth` sync from `tree_config.depth` (nested path). Previously missed.
 
 ---
 
@@ -834,10 +855,10 @@ Key gaps identified in Phase 1 code that v2 fixes:
 
 ### 2026-04-22 — Dev Server Fixes + Website Path Migration ✅
 
-**Problem:** Website was being served from `$DATA_DIR/website/docs/` (stale copy not in git) instead of `$REPO_DIR/website/` (git-managed canonical source).
+**Problem:** Website was being served from `.<DATA>/website/docs/` (stale copy not in git) instead of `./website/` (git-managed canonical source).
 
 **Actions:**
-1. Fixed nginx root: `$DATA_DIR/website/docs/` → `$REPO_DIR/website/`
+1. Fixed nginx root: `.<DATA>/website/docs/` → `./website/`
 2. Fixed `api_server.py`: added `CORSMiddleware` (allow `*`)
 3. Fixed `index.html` API URLs: `https://militarymanuals.ai` → `http://127.0.0.1:8100`
 4. Fixed `API_KEY` → `apiKey = null` (no auth for local dev)
@@ -846,7 +867,7 @@ Key gaps identified in Phase 1 code that v2 fixes:
 7. Fixed provenance fetch URLs (2 calls) to use `${API_BASE}`
 8. Removed stale `269 documents` hardcoded count
 9. Archived old website: `/data/archive/military-documents-website-20260422_081104`
-10. Fixed nginx permission: `chmod o+x` on `/home/youruser` and `$REPO_DIR`
+10. Fixed nginx permission: `chmod o+x` on `<HOME>` and `./zk-rag-v2`
 11. Fixed `rag-api.conf`: commented out `access_by_lua_block` (broken since 2026-04-14)
 12. Fixed `military-manuals-local.conf`: removed `more_clear_headers` directive (not compiled into OpenResty)
 13. Used `sudo systemctl reload openresty` to apply changes
@@ -915,7 +936,7 @@ Key gaps identified in Phase 1 code that v2 fixes:
 
 **Contract name:** `MerkleRootRegistryV2`
 **Language:** Solidity 0.8.24
-**Source:** `$REPO_DIR/pipeline_f/contracts/MerkleRootRegistryV2.sol`
+**Source:** `./pipeline_f/contracts/MerkleRootRegistryV2.sol`
 
 |**Deployed Addresses:**
 
@@ -927,10 +948,10 @@ Key gaps identified in Phase 1 code that v2 fixes:
 **Owner:** `0xBABc60eD17e6387AEDab112E80744aA19EFCb723` (matches DEPLOYER_KEY)
 **Access control:** `appendRoot()` / `batchAppendRoots()` — owner OR any address on allowlist
 
-**`.env` config (`$REPO_DIR/.env`):**
+**`.env` config (`./.env`):**
 ```bash
 ACTIVE_NETWORK=testnet
-source $REPO_DIR/.env && cd $REPO_DIR/pipeline_f
+source ./.env && cd ./pipeline_f
 
 # Emit docs
 python3 emit_all.py --batch --limit N
@@ -941,15 +962,15 @@ python3 emit_all.py --batch --limit N --dry-run
 
 **Run Pipeline F:**
 ```bash
-source $REPO_DIR/.env && python3 emit_all.py --batch --limit 10
+source ./.env && python3 emit_all.py --batch --limit 10
 ```
 
 **Key paths:**
 ```
 Contract address:  auto-selected from .env ACTIVE_NETWORK
-Merkle tree input: $DATA_DIR/merkle_trees/{doc_id}_tree.json
-Registry:          $DATA_DIR/registry.json
-Logs:              $DATA_DIR/logs/
+Merkle tree input: .<DATA>/merkleTrees/{doc_id}_tree.json
+Registry:          .<DATA>/registry.json
+Logs:              .<DATA>/logs/
 ```
 ---
 

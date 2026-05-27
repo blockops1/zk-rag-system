@@ -27,11 +27,11 @@ from pathlib import Path
 # Qdrant
 from qdrant_client import QdrantClient
 
-ZK_PROOFS_DIR = Path("$DATA_DIR/zk_proofs")
+ZK_PROOFS_DIR = Path("../data/zk_proofs")
 
 PROVE_BIN = os.environ.get(
     "PROVE_BIN",
-    "$REPO_DIR/zk-circuit/target/release/prove-bin",
+    "./zk-circuit/target/release/prove-bin",
 )
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://127.0.0.1:6333")
 QDRANT_PATH = None  # Use URL mode (API server); path is for local-only mode
@@ -152,7 +152,7 @@ def verify_proof_locally(output: dict) -> bool:
     """Verify the proof using verify-zk-proof binary."""
     verify_bin = os.environ.get(
         "VERIFY_BIN",
-        "$REPO_DIR/zk-circuit/target/release/verify-zk-proof",
+        "./zk-circuit/target/release/verify-zk-proof",
     )
     input_file = f"/tmp/verify_input_{uuid.uuid4().hex[:8]}.json"
     try:

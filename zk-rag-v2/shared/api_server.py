@@ -16,8 +16,8 @@ print(f"[api_server] CWD: {os.getcwd()}", flush=True)
 print(f"[api_server] sys.path[0]: {sys.path[0]}", flush=True)
 
 # Fix sys.path so imports work regardless of WorkingDirectory
-# __file__ = $REPO_DIR/shared/api_server.py  (R730 layout)
-#          = $ZK_RAG_HOME/rag/api_server.py              (VPS layout)
+# __file__ = ./shared/api_server.py  (R730 layout)
+#          = /home/deruyter/rag/api_server.py              (VPS layout)
 # Detect which layout we're in and add the right parent to sys.path
 _this_file = os.path.abspath(__file__)
 _this_dir = os.path.dirname(_this_file)
@@ -26,13 +26,13 @@ if os.path.basename(_this_dir) == "shared":
     _project_root = os.path.dirname(_this_dir)
     sys.path.insert(0, _project_root)
 else:
-    # VPS layout: api_server.py is directly in $ZK_RAG_HOME/rag/
+    # VPS layout: api_server.py is directly in /home/deruyter/rag/
     # shared/ module files live at the same level, not in a subdirectory
-    # Add parent ($ZK_RAG_HOME/) so `shared` resolves via the symlink below
+    # Add parent (/home/deruyter/) so `shared` resolves via the symlink below
     _project_root = os.path.dirname(_this_dir)
     sys.path.insert(0, _project_root)
-    # On VPS, $ZK_RAG_HOME/shared is a symlink to $ZK_RAG_HOME/rag/
-    # so `import shared` resolves to $ZK_RAG_HOME/shared/ → $ZK_RAG_HOME/rag/
+    # On VPS, /home/deruyter/shared is a symlink to /home/deruyter/rag/
+    # so `import shared` resolves to /home/deruyter/shared/ → /home/deruyter/rag/
     _shared_link = os.path.join(_project_root, "shared")
     if not os.path.islink(_shared_link) and not os.path.isdir(_shared_link):
         os.symlink(_this_dir, _shared_link)
@@ -69,14 +69,13 @@ from x402_paid_download import (
 )
 print("[api_server] x402 import OK", flush=True)
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Header, Query
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
-from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from qdrant_client.http.exceptions import ApiException
@@ -86,28 +85,97 @@ _EMBEDDING_SERVICE_URL = "http://127.0.0.1:8200"
 _http_client: httpx.AsyncClient | None = None
 
 
+# ── Embedding model (fastembed, loaded once at startup) ──────────────────────
+#
+# NomicEmbedText-v1.5 via fastembed — ~1.3GB RSS vs 5-6GB for sentence-transformers.
+# On VPS (16GB RAM) this keeps the total footprint under control without a separate service.
+# Concurrent encodes are bounded by a semaphore so burst queries don't exhaust memory.
+
+import threading
+
+MAX_CONCURRENT = min(os.cpu_count() or 1, 20)
+_encode_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT, thread_name_prefix="encode-")
+_encode_semaphore = threading.Semaphore(MAX_CONCURRENT)
+
+_embed_model = None
+_embed_model_loaded = False
+
+
+def _load_embed_model():
+    """Load NomicEmbedText-v1.5 via fastembed. Called once at startup."""
+    global _embed_model, _embed_model_loaded
+    print("[api_server] Loading NomicEmbedText-v1.5 via fastembed...", flush=True)
+    from fastembed import TextEmbedding
+    _embed_model = TextEmbedding(
+        "nomic-ai/nomic-embed-text-v1.5",
+        max_length=512,
+        threads=1,
+        enable_cpu_mem_arena=False,
+    )
+    _embed_model_loaded = True
+    print(f"[api_server] Embedding model loaded. dim={_embed_model.embedding_size}", flush=True)
+    return _embed_model
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize httpx client on startup; close on shutdown."""
+    """Load embedding model on startup; close thread pool on shutdown."""
     global _http_client
     print("[api_server] [lifespan] Configuring httpx limits...", flush=True)
-    limits = httpx.Limits(max_connections=10, max_keepalive_connections=5)
-    print("[api_server] [lifespan] Creating httpx AsyncClient...", flush=True)
+    # Note: httpx client is kept for x402 paid download calls, not for embeddings
     _http_client = httpx.AsyncClient(
-        base_url=_EMBEDDING_SERVICE_URL,
-        limits=limits,
+        base_url="http://127.0.0.1:8200",  # kept for x402 compatibility
+        limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
         timeout=httpx.Timeout(60.0),
     )
-    print("[api_server] [lifespan] HTTP client initialized OK", flush=True)
-    logger.info("RAG API HTTP client initialized")
+    print("[api_server] [lifespan] Loading embedding model...", flush=True)
+    try:
+        _load_embed_model()
+    except Exception as e:
+        print(f"[api_server] [lifespan] CRITICAL: failed to load embedding model: {e}", flush=True)
+        raise
+    print("[api_server] [lifespan] Startup complete.", flush=True)
     yield
     if _http_client:
         await _http_client.aclose()
-    logger.info("RAG API HTTP client closed")
+    _encode_executor.shutdown(wait=False)
     print("[api_server] Lifespan shutdown complete.", flush=True)
 
+
+# ── Sync encode helpers ─────────────────────────────────────────────────────────
+
+
+def _encode_texts_sync(texts: list[str]) -> list[list[float]]:
+    """Encode texts to embedding vectors using the in-process fastembed model.
+
+    Must be called from a thread (via ThreadPoolExecutor) since fastembed is sync.
+    The semaphore is acquired by the caller before invoking this.
+    """
+    emb_list = []
+    for text in texts:
+        for emb in _embed_model.passage_embed([text]):
+            emb_list.append(emb.tolist())
+            break  # one text -> one embedding
+    return emb_list
+
+
+async def _embed_texts_async(texts: list[str]) -> list[list[float]]:
+    """Async wrapper — runs sync fastembed encode in thread pool with semaphore bounding."""
+    acquired = _encode_semaphore.acquire(timeout=60)
+    if not acquired:
+        raise HTTPException(
+            status_code=503,
+            detail="Server at capacity — try again shortly",
+        )
+    try:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(_encode_executor, _encode_texts_sync, texts)
+    finally:
+        _encode_semaphore.release()
+
+
 # Configure logging to file
-LOG_DIR = "$DATA_DIR/logs"
+LOG_DIR = "../data/logs"
 LOG_FILE = f"{LOG_DIR}/api_server.log"
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -137,10 +205,10 @@ app.add_middleware(
     allow_methods=["*"],
 )
 
-IMAGES_DIR = "$DATA_DIR/images/"
+IMAGES_DIR = os.environ.get("IMAGES_DIR", "../data/images/")
 
 # Known collections
-KNOWN_COLLECTIONS = ["army", "navy", "marines", "coast_guard", "air_force", "other"]
+KNOWN_COLLECTIONS = ["army", "navy", "marines", "coast_guard", "air_force", "joint", "other"]
 
 # Query stats tracking
 query_stats = {
@@ -162,8 +230,13 @@ _query_cache_meta: dict[str, dict] = {}  # cache_key -> {collection: str, ...}
 _INGESTED_DOCS_CACHE_TTL_SECONDS = 10 * 60
 _ingested_docs_cache: dict[str, tuple[float, set[str]]] = {}  # collection -> (timestamp, doc_ids_set)
 
+# Catalog documents cache - refreshed every 10 minutes
+# Returns full doc metadata (title, pub_year, category, page_count, ia_identifier) from Qdrant
+_CATALOG_DOCS_CACHE_TTL_SECONDS = 10 * 60
+_catalog_docs_cache: dict[str, tuple[float, dict[str, dict]]] = {}  # collection -> (timestamp, {doc_id: doc_data})
+
 # Hardcoded embedding model used for all queries (matches embedding service)
-_EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-0.6B"
+_EMBEDDING_MODEL = "nomic-ai/nomic-embed-text-v1.5"
 
 
 def _make_cache_key(query: str, collection: str, top_k: int, embedding_model: str) -> str:
@@ -206,6 +279,14 @@ def _query_cache_invalidate(collection: str) -> int:
 
 class QueryRequest(BaseModel):
     """Request model for POST /api/query."""
+
+    @field_validator("query")
+    @classmethod
+    def query_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("query must not be blank")
+        return v.strip()
+
     query: str
     top_k: int = 5
     collection: str
@@ -224,6 +305,7 @@ class QueryProvanableRequest(BaseModel):
     query: str
     top_k: int = 5
     collection: str = "army"
+    doc_id: str | None = None  # If set, scope search to this document only
 
 
 class QueryProvanableResponse(BaseModel):
@@ -231,9 +313,10 @@ class QueryProvanableResponse(BaseModel):
 
     Returns chunks with ZK proofs already generated and attached.
     No chunk text is returned without a corresponding proof.
+    Each chunk's zk_proof includes kurier_job_id if auto-submit to Kurier succeeded.
     """
-    chunks: list[dict]  # each chunk includes zk_proof with proof_hex, public_inputs, etc.
-    proofs: dict  # keyed by chunk_id: {chunk_id: {proof_hex, public_inputs, ...}}
+    chunks: list[dict]  # each chunk includes zk_proof with proof_hex, public_inputs, kurier_job_id, etc.
+    proofs: dict  # keyed by chunk_id: {chunk_id: {proof_hex, public_inputs, kurier_job_id, ...}}
     query: str
     collection: str
     total: int
@@ -250,7 +333,7 @@ def health():
     return {
         "status": "ok",
         "qdrant": "connected",
-        "model": "Qwen/Qwen3-Embedding-0.6B",
+        "model": "nomic-ai/nomic-embed-text-v1.5",
         "bm25": "disabled"
     }
 
@@ -320,7 +403,7 @@ def _get_collection_stats(collection_name: str) -> dict:
         "doc_count": doc_count,
         "vector_count": vector_count,
         "vector_dim": vector_dim,
-        "embedding_model": "Qwen/Qwen3-Embedding-0.6B",
+        "embedding_model": "nomic-ai/nomic-embed-text-v1.5",
         "chunk_count": vector_count
     }
     
@@ -348,7 +431,7 @@ def list_collections():
     
     # Parallel fetch — each collection is independent, same pattern as Ruff's par_iter
     collections_info = []
-    with ThreadPoolExecutor(max_workers=min(len(target_collections), 4)) as executor:
+    with ThreadPoolExecutor(max_workers=max(1, min(len(target_collections), 4))) as executor:
         futures = {executor.submit(_get_collection_stats, c): c for c in target_collections}
         for future in as_completed(futures):
             collection_name = futures[future]
@@ -393,11 +476,13 @@ def invalidate_query_cache(collection: str = Query(default=None, description="Op
         return {"status": "invalidated", "collection": None, "count": count}
 
 
-_REGISTRY_PATH = Path("$DATA_DIR/registry.json")
+_REGISTRY_PATH = Path(os.environ.get("REGISTRY_PATH", "../data/registry.json"))
 _COLLECTION_DESCRIPTIONS = {
     "army": "U.S. Army field manuals, doctrine publications, and operational guidance",
     "navy": "U.S. Navy tactical and operational publications",
     "marines": "U.S. Marine Corps doctrine and tactical guidance",
+    "air_force": "U.S. Air Force doctrine, tactics, and operational guidance",
+    "joint": "Multi-service and joint doctrine publications",
     "other": "Cross-service and multi-service military publications",
 }
 
@@ -438,53 +523,75 @@ def _get_ingested_doc_ids(collection: str) -> set[str]:
     return doc_ids
 
 
+def _get_catalog_docs_per_collection(collection: str) -> dict[str, dict]:
+    """Return a dict of doc_id -> doc metadata for all documents in a Qdrant collection.
+
+    Scrapes the full collection via scroll, deduplicates by doc_id, and returns
+    the canonical document metadata (title, pub_year, category, page_count,
+    ia_identifier, doc_type, branch) from the first occurrence of each doc_id.
+    Results are cached for _CATALOG_DOCS_CACHE_TTL_SECONDS.
+    """
+    now = time.time()
+    cached = _catalog_docs_cache.get(collection)
+    if cached and (now - cached[0]) < _CATALOG_DOCS_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    docs: dict[str, dict] = {}
+    try:
+        offset = None
+        while True:
+            payload = {
+                "limit": 1000,
+                "with_payload": ["doc_id", "title", "pub_year", "category", "page_count", "ia_identifier", "doc_type", "branch"],
+            }
+            if offset:
+                payload["offset"] = offset
+            resp = client.scroll(collection_name=collection, **payload)
+            for point in resp[0]:
+                doc_id = point.payload.get("doc_id")
+                if not doc_id or doc_id in docs:
+                    continue
+                docs[doc_id] = {
+                    "doc_id": doc_id,
+                    "title": point.payload.get("title") or "Untitled",
+                    "pub_year": point.payload.get("pub_year"),
+                    "category": point.payload.get("category") or "",
+                    "page_count": point.payload.get("page_count"),
+                    "ia_identifier": point.payload.get("ia_identifier") or "",
+                    "doc_type": point.payload.get("doc_type") or "",
+                    "branch": point.payload.get("branch") or collection,
+                }
+            offset = resp[1]
+            if not offset:
+                break
+    except (ApiException, Exception) as e:
+        logger.warning(f"Failed to scroll catalog from {collection}: {e}")
+        if cached:
+            return cached[1]
+        return {}
+
+    _catalog_docs_cache[collection] = (now, docs)
+    return docs
+
+
 @app.get("/api/catalog")
 def get_catalog():
     """Return documents grouped by branch/collection, filtered to only those indexed in Qdrant.
 
-    Reads from the unified registry, cross-references with Qdrant to include only
-    ingested documents, and returns document listings per collection.
-    Each entry includes: doc_id, title, branch, category, pub_year, page_count.
+    Titles, pub_year, category, page_count, and ia_identifier are sourced directly
+    from Qdrant payloads — the same data stored at ingest time from the registry.
+    This ensures the catalog always reflects the authoritative Qdrant state.
     """
-    try:
-        with open(_REGISTRY_PATH) as f:
-            registry = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        logger.warning(f"Failed to read registry: {e}")
-        raise HTTPException(status_code=503, detail="Registry unavailable") from e
-
-    docs = registry.get("documents", [])
-    if isinstance(docs, dict):
-        doc_list = list(docs.values())
-    else:
-        doc_list = docs
-
-    # Build set of ingested doc_ids per collection (cached)
-    ingested_by_collection: dict[str, set[str]] = {}
-    for coll in _COLLECTION_DESCRIPTIONS:
-        ingested_by_collection[coll] = _get_ingested_doc_ids(coll)
-
-    # Group by branch, filtering to only ingested docs
+    # Build list of docs per collection from Qdrant (cached)
     collections_map: dict[str, list[dict]] = {
         name: [] for name in _COLLECTION_DESCRIPTIONS
     }
-    for doc in doc_list:
-        doc_id = doc.get("doc_id")
-        branch = doc.get("branch", "other")
-        if branch not in collections_map:
-            collections_map[branch] = []
-        # Only include docs that were actually indexed into this branch's collection
-        if doc_id and doc_id in ingested_by_collection.get(branch, set()):
-            collections_map[branch].append({
-                "doc_id": doc_id,
-                "title": doc.get("title") or doc.get("filename", "Untitled"),
-                "branch": branch,
-                "category": doc.get("category", ""),
-                "pub_year": doc.get("pub_year"),
-                "page_count": doc.get("page_count"),
-                "ia_identifier": doc.get("ia_identifier", ""),
-            })
+    for coll in _COLLECTION_DESCRIPTIONS:
+        docs = _get_catalog_docs_per_collection(coll)
+        for doc_id, doc_data in docs.items():
+            collections_map[coll].append(doc_data)
 
+    # Assemble response — same shape as before so website JS is unaffected
     result = []
     for name, description in _COLLECTION_DESCRIPTIONS.items():
         docs_for_branch = collections_map.get(name, [])
@@ -556,32 +663,321 @@ def get_document(doc_id: str):
     raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found")
 
 
+# ─── Admin Document Review Endpoints ─────────────────────────────────────────
+
+_ADMIN_KEY = os.environ.get("ADMIN_API_KEY", "")
+
+
+def _require_admin_key(x_admin_key: str = Header(default="")):
+    """Abort if X-Admin-Key header doesn't match the configured key."""
+    if not _ADMIN_KEY:
+        raise HTTPException(status_code=500, detail="ADMIN_API_KEY not configured on server")
+    if x_admin_key != _ADMIN_KEY:
+        raise HTTPException(status_code=401, detail="Invalid admin key")
+
+
+@app.get("/api/admin/documents")
+def admin_list_documents(x_admin_key: str = Header(default="")):
+    """Return all documents from registry with chunk counts from Qdrant.
+
+    Requires X-Admin-Key header.
+    """
+    _require_admin_key(x_admin_key)
+
+    try:
+        with open(_REGISTRY_PATH) as f:
+            registry = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.warning(f"Failed to read registry: {e}")
+        raise HTTPException(status_code=503, detail="Registry unavailable") from e
+
+    docs = registry.get("documents", [])
+    if isinstance(docs, dict):
+        doc_list = list(docs.values())
+    else:
+        doc_list = docs
+
+    # Single scroll per collection → doc_id → count  (O(collections) not O(docs*collections))
+    def scroll_counts(coll: str) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        try:
+            offset = None
+            while True:
+                records, offset = client.scroll(
+                    collection_name=coll, limit=1000, offset=offset,
+                    with_payload=["doc_id"]
+                )
+                for rec in records:
+                    did = rec.payload.get("doc_id") if rec.payload else None
+                    if did:
+                        counts[did] = counts.get(did, 0) + 1
+                if not offset:
+                    break
+        except (ApiException, Exception) as e:
+            logger.warning(f"Failed to scroll collection '{coll}' for chunk counts: {e}")
+        return counts
+
+    with ThreadPoolExecutor(max_workers=len(KNOWN_COLLECTIONS)) as ex:
+        futures = {ex.submit(scroll_counts, c): c for c in KNOWN_COLLECTIONS}
+        chunk_counts: dict[str, int] = {}
+        for f in as_completed(futures):
+            for did, cnt in f.result().items():
+                chunk_counts[did] = chunk_counts.get(did, 0) + cnt
+
+    result = []
+    for doc in doc_list:
+        doc_id = doc.get("doc_id", "")
+        result.append({
+            "doc_id": doc_id,
+            "title": doc.get("title") or doc.get("filename", "Untitled"),
+            "branch": doc.get("branch", "other"),
+            "category": doc.get("category", ""),
+            "pub_year": doc.get("pub_year"),
+            "page_count": doc.get("page_count"),
+            "status": doc.get("status", "unknown"),
+            "has_embeddings": doc.get("has_embeddings", False),
+            "embedding_status": doc.get("embedding_status", ""),
+            "chunk_count": chunk_counts.get(doc_id, -1),
+            "avg_chars_per_page": doc.get("avg_chars_per_page"),
+            "file_size_bytes": doc.get("file_size_bytes"),
+        })
+
+    return result
+
+
+@app.get("/api/admin/document/{doc_id}")
+def admin_get_document(doc_id: str, x_admin_key: str = Header(default="")):
+    """Return full document detail: all chunks + per-page image list.
+    
+    Searches all known collections in parallel for all chunks belonging to doc_id.
+    Requires X-Admin-Key header.
+    """
+    _require_admin_key(x_admin_key)
+
+    # Load registry for doc metadata
+    try:
+        with open(_REGISTRY_PATH) as f:
+            registry = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.warning(f"Failed to read registry: {e}")
+        raise HTTPException(status_code=503, detail="Registry unavailable") from e
+
+    docs = registry.get("documents", [])
+    if isinstance(docs, dict):
+        doc_map = {d.get("doc_id"): d for d in docs.values()}
+    else:
+        doc_map = {d.get("doc_id"): d for d in docs}
+
+    doc_meta = doc_map.get(doc_id)
+    if not doc_meta:
+        raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not in registry")
+
+    # Collect all chunks from all collections in parallel
+    def scroll_chunks(collection_name: str) -> list[dict]:
+        try:
+            filter_cond = models.Filter(
+                must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))]
+            )
+            all_chunks = []
+            offset = None
+            while True:
+                records, offset = client.scroll(
+                    collection_name=collection_name,
+                    limit=1000,
+                    offset=offset,
+                    with_payload=True,
+                    scroll_filter=filter_cond,
+                )
+                for rec in records:
+                    p = dict(rec.payload) if rec.payload else {}
+                    all_chunks.append({
+                        "chunk_index": p.get("chunk_index"),
+                        "page_num": p.get("page_num"),
+                        "char_count": len(p.get("text", "")) if p.get("text") else 0,
+                        "text": (p.get("text", "") or "")[:5000],
+                        "vector_id": str(rec.id),
+                        "collection": collection_name,
+                    })
+                if not offset:
+                    break
+            return all_chunks
+        except (ApiException, Exception) as e:
+            logger.warning(f"Failed to scroll collection '{collection_name}' for doc '{doc_id}': {e}")
+            return []
+
+    with ThreadPoolExecutor(max_workers=len(KNOWN_COLLECTIONS)) as executor:
+        futures = {executor.submit(scroll_chunks, c): c for c in KNOWN_COLLECTIONS}
+        all_chunks = []
+        for future in as_completed(futures):
+            all_chunks.extend(future.result())
+
+    # Sort by page_num then chunk_index
+    all_chunks.sort(key=lambda c: (c.get("page_num") or 0, c.get("chunk_index") or 0))
+
+    # Build per-page image list (from filesystem)
+    import re as re_mod
+
+    image_dir = Path("../data/images") / doc_id
+    page_images: dict[int, list[str]] = {}
+    if image_dir.is_dir():
+        for fpath in image_dir.iterdir():
+            fname = fpath.name
+            # match page_XXXX_img_00.jb2  or page_XXXX_img_00.png etc.
+            m = re_mod.match(r"page_(\d+)_img_\d+", fname)
+            if m:
+                page_num = int(m.group(1))
+                if page_num not in page_images:
+                    page_images[page_num] = []
+                page_images[page_num].append(fname)
+        for pn in page_images:
+            page_images[pn].sort()
+
+    return {
+        "doc_id": doc_id,
+        "title": doc_meta.get("title") or doc_meta.get("filename", "Untitled"),
+        "branch": doc_meta.get("branch", "other"),
+        "category": doc_meta.get("category", ""),
+        "pub_year": doc_meta.get("pub_year"),
+        "page_count": doc_meta.get("page_count"),
+        "status": doc_meta.get("status", "unknown"),
+        "has_embeddings": doc_meta.get("has_embeddings", False),
+        "chunks": all_chunks,
+        "images": page_images,
+    }
+
+
+@app.delete("/api/admin/document/{doc_id}")
+def admin_delete_document(doc_id: str, x_admin_key: str = Header(default="")):
+    """Delete a document from Qdrant, registry.json, and image files.
+    
+    Requires X-Admin-Key header.
+    """
+    _require_admin_key(x_admin_key)
+
+    deleted_from: list[str] = []
+    errors: list[str] = []
+
+    # 1. Delete from all Qdrant collections
+    for coll in KNOWN_COLLECTIONS:
+        try:
+            filter_cond = models.Filter(
+                must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))]
+            )
+            result = client.delete(collection_name=coll, points_selector=filter_cond)
+            deleted_from.append(f"Qdrant/{coll}")
+            logger.info(f"Deleted doc '{doc_id}' from Qdrant collection '{coll}': {result}")
+        except (ApiException, Exception) as e:
+            err = f"Qdrant/{coll}: {e}"
+            logger.warning(f"Failed to delete doc '{doc_id}' from '{coll}': {e}")
+            errors.append(err)
+
+    # 2. Invalidate query cache for affected collections
+    for coll in _COLLECTION_DESCRIPTIONS:
+        try:
+            _query_cache_invalidate(coll)
+        except Exception:
+            pass
+    try:
+        _collections_cache.clear()
+    except Exception:
+        pass
+
+    # 3. Remove from registry.json
+    try:
+        with open(_REGISTRY_PATH) as f:
+            registry = json.load(f)
+        docs = registry.get("documents", [])
+        if isinstance(docs, dict):
+            registry["documents"] = {k: v for k, v in docs.items() if v.get("doc_id") != doc_id}
+        else:
+            registry["documents"] = [d for d in docs if d.get("doc_id") != doc_id]
+        with open(_REGISTRY_PATH, "w") as f:
+            json.dump(registry, f, indent=2)
+        deleted_from.append("registry.json")
+        logger.info(f"Removed doc '{doc_id}' from registry")
+    except (FileNotFoundError, json.JSONDecodeError, IOError) as e:
+        err = f"registry: {e}"
+        logger.warning(f"Failed to update registry for doc '{doc_id}': {e}")
+        errors.append(err)
+
+    # 4. Delete image directory
+    image_dir = Path("../data/images") / doc_id
+    if image_dir.is_dir():
+        import shutil
+        try:
+            shutil.rmtree(image_dir)
+            deleted_from.append(f"images/{doc_id}/")
+            logger.info(f"Deleted image directory for doc '{doc_id}'")
+        except OSError as e:
+            err = f"images: {e}"
+            logger.warning(f"Failed to delete image directory for doc '{doc_id}': {e}")
+            errors.append(err)
+    else:
+        deleted_from.append("images/ (not found, skipped)")
+
+    if errors and not deleted_from:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {'; '.join(errors)}")
+
+    return {
+        "success": True,
+        "doc_id": doc_id,
+        "deleted_from": deleted_from,
+        "errors": errors if errors else None,
+    }
+
+
 @app.get("/api/context")
 def get_context(
     doc_id: str = Query(..., description="Document ID"),
-    chunk_index: int = Query(..., description="Chunk index (0-based)"),
+    chunk_index: int = Query(0, description="Chunk index (0-based)"),
     collection: str = Query(..., description="Collection name"),
-    window: int = Query(1, description="Window size (returns 2*window+1 chunks)")
+    window: int = Query(5, description="Window size (returns 2*window+1 chunks, used when limit is not set)"),
+    query: str = Query(default="", description="Optional: semantic search query within this document"),
+    limit: int = Query(default=0, description="If > 0, return up to this many consecutive chunks starting at chunk_index (ignores window)")
 ):
-    """Get a window of chunks from a document by position.
+    """Get chunks from a document.
 
-    Returns chunks from a single document centered around the specified
-    chunk_index. For example, window=1 returns chunks at indices N-1, N, N+1.
+    Two modes:
+    - No query param + limit=0: returns sequential chunks centered around chunk_index (window-based).
+    - No query param + limit>0: returns up to `limit` consecutive chunks starting at chunk_index.
+    - With query param: returns semantically ranked chunks matching the query,
+      filtered to this document only (top_k = window param).
 
     Args:
         doc_id: The document ID
-        chunk_index: The center chunk index (0-based)
-        collection: The collection name to search in
-        window: Window size (returns 2*window+1 chunks centered on chunk_index)
-
-    Returns:
-        Dictionary with 'results' list containing the window of chunks
+        chunk_index: The center chunk index for sequential mode (0-based)
+        collection: The collection name
+        window: For sequential mode, window size (2*window+1 chunks returned).
+                For semantic mode, top_k limit.
+        query: If provided, triggers semantic search within this document
     """
     # Validate collection
+    # Resolve actual Qdrant collection — some catalog collections (e.g. "joint") are
+    # logical groups stored across multiple real Qdrant collections.  When the
+    # requested collection is not a direct Qdrant collection, search all known
+    # collections to find where this doc_id actually lives and use that.
+    actual_collection = collection
     if collection not in KNOWN_COLLECTIONS:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid collection. Must be one of: {', '.join(KNOWN_COLLECTIONS)}"
-        )
+        for candidate in KNOWN_COLLECTIONS:
+            try:
+                filter_cond = models.Filter(
+                    must=[models.FieldCondition(
+                        key="doc_id",
+                        match=models.MatchValue(value=doc_id)
+                    )]
+                )
+                records, _ = client.scroll(
+                    collection_name=candidate,
+                    limit=1,
+                    offset=None,
+                    with_payload=False,
+                    scroll_filter=filter_cond
+                )
+                if records:
+                    actual_collection = candidate
+                    break
+            except (ApiException, Exception):
+                continue
 
     # Validate chunk_index
     if chunk_index < 0:
@@ -591,6 +987,65 @@ def get_context(
     if window < 0:
         raise HTTPException(status_code=400, detail="window must be non-negative")
 
+    # ── Semantic search mode ────────────────────────────────────────────────────
+    if query and query.strip():
+        try:
+            # Embed the query using the in-process embedding service (sync context)
+            acquired = _encode_semaphore.acquire(timeout=60)
+            if not acquired:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Server at capacity — try again shortly",
+                )
+            try:
+                query_vector = _encode_texts_sync([query.strip()])[0]
+            finally:
+                _encode_semaphore.release()
+
+            # Vector search within this document only
+            filter_condition = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="doc_id",
+                        match=models.MatchValue(value=doc_id)
+                    )
+                ]
+            )
+
+            search_results = client.query_points(
+                collection_name=actual_collection,
+                query=query_vector,
+                limit=window,  # window param doubles as top_k in semantic mode
+                with_payload=True,
+                query_filter=filter_condition
+            )
+
+            results = []
+            for result in search_results.points:
+                payload = dict(result.payload) if result.payload else {}
+                payload["score"] = result.score
+                # Derive chunk_index from chunk_id (format: doc_id-chunk_index)
+                chunk_id = payload.get("chunk_id", "")
+                if chunk_id:
+                    parts = chunk_id.rsplit("-", 1)
+                    if len(parts) == 2:
+                        try:
+                            payload["chunk_index"] = int(parts[1])
+                        except ValueError:
+                            pass
+                results.append(payload)
+
+            # Sort by score descending
+            results.sort(key=lambda x: x.get("score", 0), reverse=True)
+            return {"results": results}
+
+        except HTTPException:
+            raise
+        except (ApiException, Exception) as e:
+            logger.warning(f"Semantic search failed for doc '{doc_id}' in collection '{collection}': {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to search document: {e}") from e
+
+    # ── Sequential mode ───────────────────────────────────────────────────────
     try:
         # Use Qdrant filter to get only chunks for this document
         filter_condition = models.Filter(
@@ -608,7 +1063,7 @@ def get_context(
 
         while True:
             records, next_offset = client.scroll(
-                collection_name=collection,
+                collection_name=actual_collection,
                 limit=10000,
                 offset=next_offset,
                 with_payload=True,
@@ -643,9 +1098,13 @@ def get_context(
         # Sort chunks by their index
         doc_chunks.sort(key=lambda x: x.get("_chunk_index", 0))
 
-        # Calculate window bounds
-        start_idx = max(0, chunk_index - window)
-        end_idx = min(len(doc_chunks) - 1, chunk_index + window)
+        # Calculate window bounds — use limit if set, otherwise window
+        if limit > 0:
+            start_idx = chunk_index
+            end_idx = min(len(doc_chunks) - 1, chunk_index + limit - 1)
+        else:
+            start_idx = max(0, chunk_index - window)
+            end_idx = min(len(doc_chunks) - 1, chunk_index + window)
 
         # Extract chunks in the window
         window_chunks = []
@@ -665,6 +1124,60 @@ def get_context(
     except (ApiException, httpx.HTTPError, Exception) as e:
         logger.warning(f"Failed to get context for doc '{doc_id}' in collection '{collection}': {e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve context: {e}") from e
+
+
+@app.get("/api/collection/search")
+def search_collection(
+    collection: str = Query(..., description="Collection name"),
+    q: str = Query(..., description="Search query"),
+    top_k: int = Query(10, description="Max results to return")
+):
+    """Semantic search within a specific collection.
+
+    Returns matching chunks from all documents in the collection,
+    ranked by vector similarity.
+    """
+    if collection not in KNOWN_COLLECTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid collection. Must be one of: {', '.join(KNOWN_COLLECTIONS)}"
+        )
+    if not q or not q.strip():
+        raise HTTPException(status_code=400, detail="Query parameter 'q' is required")
+
+    try:
+        acquired = _encode_semaphore.acquire(timeout=60)
+        if not acquired:
+            raise HTTPException(
+                status_code=503,
+                detail="Server at capacity — try again shortly",
+            )
+        try:
+            query_vector = _encode_texts_sync([q.strip()])[0]
+        finally:
+            _encode_semaphore.release()
+
+        search_results = client.query_points(
+            collection_name=collection,
+            query=query_vector,
+            limit=top_k,
+            with_payload=True,
+        )
+
+        results = []
+        for result in search_results.points:
+            payload = dict(result.payload) if result.payload else {}
+            payload["score"] = result.score
+            results.append(payload)
+
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        return {"results": results}
+
+    except HTTPException:
+        raise
+    except (ApiException, Exception) as e:
+        logger.warning(f"Collection search failed for '{collection}' q='{q}': {e}")
+        raise HTTPException(status_code=500, detail=f"Collection search failed: {e}") from e
 
 
 @app.get("/api/images/{doc_id}/{page_num}")
@@ -729,8 +1242,8 @@ def api_manifest():
         "description": "REST API for semantic search against military documents stored in Qdrant",
         "endpoints": endpoints,
         "collections": KNOWN_COLLECTIONS,
-        "embedding_model": "Qwen/Qwen3-Embedding-0.6B",
-        "vector_dimension": 1024
+        "embedding_model": "nomic-ai/nomic-embed-text-v1.5",
+        "vector_dimension": 768
     }
 
 
@@ -750,25 +1263,40 @@ def get_openapi_json():
 def _search_single_collection(
     collection_name: str,
     query_vector: list,
-    request: QueryRequest
+    request: QueryRequest,
+    doc_id: str | None = None
 ) -> list[dict]:
     """Perform vector-only search on a single collection.
-    
+
     Args:
         collection_name: Name of the collection to search
         query_vector: The query vector for similarity search
         request: QueryRequest with query text, top_k, and collection
-        
+        doc_id: If set, filter results to only this document
+
     Returns:
         List of result dictionaries with payload and score
     """
+    # Build optional doc_id filter
+    filter_condition = None
+    if doc_id:
+        filter_condition = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="doc_id",
+                    match=models.MatchValue(value=doc_id)
+                )
+            ]
+        )
+
     # Vector-only search
     try:
         search_results = client.query_points(
             collection_name=collection_name,
             query=query_vector,
             limit=request.top_k,
-            with_payload=True
+            with_payload=True,
+            query_filter=filter_condition
         )
     except (ApiException, Exception) as e:
         logger.error(f"Collection '{collection_name}' not found: {e}")
@@ -838,23 +1366,14 @@ async def query(request: QueryRequest):
             total=len(cached_results)
         )
 
-    # Embed the query via embedding service
-    global _http_client
+    # Embed the query using in-process fastembed
     try:
-        resp = await _http_client.post(
-            "/encode",
-            json={"texts": [request.query]},
-            timeout=60.0,
-        )
-        if resp.status_code != 200:
-            raise HTTPException(status_code=502, detail=f"Embedding service error: {resp.text}")
-        embedding_data = resp.json()
-        query_vector = embedding_data["embeddings"][0]
+        query_vector = (await _embed_texts_async([request.query]))[0]
     except HTTPException:
         raise
-    except httpx.HTTPError as e:
-        logger.error(f"Embedding service call failed: {e}")
-        raise HTTPException(status_code=502, detail=f"Embedding service unreachable: {e}") from e
+    except Exception as e:
+        logger.error(f"Embedding failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Embedding failed: {e}") from e
     
     # Check if this is a cross-collection search
     if request.collection == "*":
@@ -896,7 +1415,7 @@ async def query(request: QueryRequest):
     # ── Log search query ────────────────────────────────────────────────────────
     try:
         import json
-        log_path = "$DATA_DIR/logs/search_queries.log"
+        log_path = "../data/logs/search_queries.log"
         with open(log_path, "a") as lf:
             lf.write(json.dumps({
                 "ts": datetime.now(timezone.utc).isoformat() + "Z",
@@ -970,36 +1489,55 @@ async def query_provable(request: QueryProvanableRequest):
     """
     _query_start = time.monotonic()
 
+    # Resolve actual Qdrant collection for non-standard catalog collections.
+    # Some catalog collections (e.g. "joint") are logical groups whose docs
+    # are stored across real Qdrant collections.  When doc_id is provided and
+    # the requested collection is not a direct Qdrant collection, find which
+    # collection actually holds this doc_id.
+    actual_collection = request.collection
+    if request.doc_id and request.collection not in KNOWN_COLLECTIONS:
+        for candidate in KNOWN_COLLECTIONS:
+            try:
+                filter_cond = models.Filter(
+                    must=[models.FieldCondition(
+                        key="doc_id",
+                        match=models.MatchValue(value=request.doc_id)
+                    )]
+                )
+                records, _ = client.scroll(
+                    collection_name=candidate,
+                    limit=1,
+                    offset=None,
+                    with_payload=False,
+                    scroll_filter=filter_cond
+                )
+                if records:
+                    actual_collection = candidate
+                    break
+            except (ApiException, Exception):
+                continue
+
     # Validate top_k
     if request.top_k < 1:
         raise HTTPException(status_code=400, detail="top_k must be at least 1")
     if request.top_k > 50:
         raise HTTPException(status_code=400, detail="top_k cannot exceed 50")
 
-    # Validate collection
-    if request.collection not in KNOWN_COLLECTIONS and request.collection != "*":
+    # Validate collection (after resolution — non-standard collections with no doc_id still rejected)
+    if actual_collection not in KNOWN_COLLECTIONS and actual_collection != "*":
         raise HTTPException(
             status_code=400,
             detail=f"Invalid collection. Must be one of: {', '.join(KNOWN_COLLECTIONS)} or '*' for cross-collection search"
         )
 
-    # Embed query via embedding service
-    global _http_client
+    # Embed query using in-process fastembed
     try:
-        resp = await _http_client.post(
-            "/encode",
-            json={"texts": [request.query]},
-            timeout=60.0,
-        )
-        if resp.status_code != 200:
-            raise HTTPException(status_code=502, detail=f"Embedding service error: {resp.text}")
-        embedding_data = resp.json()
-        query_vector = embedding_data["embeddings"][0]
+        query_vector = (await _embed_texts_async([request.query]))[0]
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Embedding service call failed: {e}")
-        raise HTTPException(status_code=502, detail=f"Embedding service unreachable: {e}") from e
+        logger.error(f"Embedding failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Embedding failed: {e}") from e
 
     # Query Qdrant
     if request.collection == "*":
@@ -1029,13 +1567,14 @@ async def query_provable(request: QueryProvanableRequest):
         results = all_results[:request.top_k]
     else:
         results = _search_single_collection(
-            collection_name=request.collection,
+            collection_name=actual_collection,
             query_vector=query_vector,
             request=QueryRequest(
                 query=request.query,
                 top_k=request.top_k,
-                collection=request.collection,
+                collection=actual_collection,
             ),
+            doc_id=request.doc_id,
         )
 
     if not results:
@@ -1104,6 +1643,7 @@ async def query_provable(request: QueryProvanableRequest):
                 "vk_hex": proof_data.get("vk_hex", ""),
                 "public_inputs": proof_data.get("public_inputs", {}),
                 "public_inputs_hex": proof_data.get("public_inputs_hex", ""),
+                "kurier_job_id": proof_data.get("kurier_job_id"),
             }
             provenanced_chunks.append(result)
 
@@ -1114,7 +1654,7 @@ async def query_provable(request: QueryProvanableRequest):
     # ── Log search query ──────────────────────────────────────────────────────────
     try:
         import json
-        log_path = "$DATA_DIR/logs/search_queries.log"
+        log_path = "../data/logs/search_queries.log"
         with open(log_path, "a") as lf:
             lf.write(json.dumps({
                 "ts": datetime.now(timezone.utc).isoformat() + "Z",
@@ -1415,6 +1955,66 @@ async def get_proof_status(job_id: str):
     )
 
 
+# ─── Public Kurier polling (no nginx auth required) ──────────────────────────
+# The /api/provenance/status/ endpoint is behind nginx Basic auth.
+# This endpoint lets the browser poll Kurier job status without any API key.
+
+@app.get("/api/provenance/poll/{job_id}")
+async def poll_kurier_status(job_id: str):
+    """Poll Kurier job status — no auth required.
+
+    This is a thin proxy to poll_zkverify_job that bypasses nginx's
+    auth layer so browsers can poll without an API key.
+    """
+    if not job_id:
+        raise HTTPException(status_code=400, detail="job_id is required")
+
+    loop = asyncio.get_running_loop()
+    try:
+        poll_result = await loop.run_in_executor(
+            None,
+            provenance_module.poll_zkverify_job,
+            job_id,
+            10,   # poll_interval seconds
+            300,  # max_wait seconds
+        )
+    except Exception as e:
+        logger.error(f"Status poll failed for {job_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Status poll failed: {e}") from e
+
+    status = poll_result.get("status", "pending")
+    terminal_states = {"finalized", "completed", "verified", "failed", "rejected", "invalid"}
+    is_terminal = status.lower() in terminal_states
+
+    verified = None
+    message = None
+    explorer_url = poll_result.get("zkverify_explorer_url")
+    tx_hash = poll_result.get("tx_hash")
+    tx_explorer_url = poll_result.get("tx_explorer_url")
+    block_hash = poll_result.get("block_hash")
+    block_explorer_url = poll_result.get("block_explorer_url")
+
+    if is_terminal:
+        if status.lower() in {"finalized", "completed", "verified"}:
+            verified = True
+            message = "Proof verified on zkVerify"
+        else:
+            verified = False
+            message = f"Verification failed: {status}"
+
+    return {
+        "job_id": job_id,
+        "status": status,
+        "verified": verified,
+        "message": message,
+        "explorer_url": explorer_url,
+        "tx_hash": tx_hash,
+        "tx_explorer_url": tx_explorer_url,
+        "block_hash": block_hash,
+        "block_explorer_url": block_explorer_url,
+    }
+
+
 # ─── X402 Paid Download Endpoints ─────────────────────────────────────────────
 
 @app.get("/api/source/{doc_id}/info")
@@ -1422,7 +2022,7 @@ async def get_source_info(doc_id: str):
     """Return document metadata and price for paid PDF download."""
     import json
 
-    registry_path = Path("$DATA_DIR/registry.json")
+    registry_path = Path("../data/registry.json")
     try:
         with open(registry_path) as f:
             registry = json.load(f)

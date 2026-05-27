@@ -9,10 +9,10 @@ Example:
     python3 prove-chunks.py 00c8a75d605f10359503c9a25fa1255f8a8946e0dd9026646bf69750639b4669 40
 
 Input data layout (per doc_id):
-    $DATA_DIR/chunks/<doc_id>/
+    ../data/chunks/<doc_id>/
         chunks.jsonl      — one JSON per line: {"chunk_id", "doc_id", "text"}
         chunk_ids.json    — list of chunk_id strings, index N = chunk N
-    $DATA_DIR/merkle_trees/<doc_id>_tree.json
+    ../data/merkleTrees/<doc_id>_tree.json
         merkle_root, leaf_hashes, paths{<chunk_index>: {leaf_hash, siblings, leaf_index}}
 
 Outputs:
@@ -32,10 +32,10 @@ from qdrant_client import QdrantClient
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
-CHUNKS_DIR = Path("$DATA_DIR/chunks")
-MERKLE_TREES_DIR = Path("$DATA_DIR/merkle_trees")
-ZK_PROOFS_DIR = Path("$DATA_DIR/zk_proofs")
-DEFAULT_PROVE_BIN = Path("$REPO_DIR/zk-circuit/target/release/prove-bin")
+CHUNKS_DIR = Path("../data/chunks")
+MERKLE_TREES_DIR = Path("../data/merkleTrees")
+ZK_PROOFS_DIR = Path("../data/zk_proofs")
+DEFAULT_PROVE_BIN = Path("./zk-circuit/target/release/prove-bin")
 LOG_DIR = ZK_PROOFS_DIR  # logs live alongside outputs for discoverability
 LOG_FILE = LOG_DIR / "prove-chunks.log"
 
@@ -252,12 +252,13 @@ def run_prove(prove_bin: Path, input_data: dict, output_path: Path) -> dict:
 
     try:
         # Point prove-bin at the pre-built circuit cache
-        os.environ["CIRCUIT_DIR"] = "$REPO_DIR/zk-circuit"
+        os.environ["CIRCUIT_DIR"] = "./zk-circuit"
         result = subprocess.run(
             [str(prove_bin), tmp_path],
             capture_output=True,
             text=True,
             check=False,  # don't raise — handle errors below
+            timeout=60,
         )
     finally:
         os.unlink(tmp_path)

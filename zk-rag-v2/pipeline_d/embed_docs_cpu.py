@@ -2,12 +2,12 @@
 """
 Pipeline D — Embedding Stage (CPU, standalone)
 
-Reads chunks from chunks/{doc_id}/chunks.jsonl, embeds them via
-sentence-transformers + Qwen/Qwen3-Embedding-0.6B on CPU, writes embeddings.npy to disk.
-
-Idempotent: skips docs that already have embeddings/{doc_id}/embeddings.npy
-Resumable: checkpoint file tracks progress and errors
-Loggable: JSON Lines to logs/embed_docs_cpu_{date}.log
+# embed_docs_cpu.py — D2: Embed chunks via fastembed + NomicEmbedText (768d)
+#
+# Reads chunks from chunks/{doc_id}/chunks.jsonl, embeds them to disk as embeddings.npy.
+# Idempotent: skips docs that already have embeddings/{doc_id}/embeddings.npy (unless --force).
+# Resumable: checkpoint file tracks progress and errors.
+# Loggable: JSON Lines to logs/embed_docs_cpu_{date}.log
 
 Usage:
     embed_docs_cpu.py                    # all docs
@@ -26,23 +26,34 @@ import time
 from datetime import datetime, date, timezone
 from pathlib import Path
 
-import numpy as np
-from sentence_transformers import SentenceTransformer
+# ── ONNX Runtime thread capping ────────────────────────────────────────────────
+# Must be set BEFORE importing fastembed/onnxruntime — they read these at load time.
+for _var in (
+    "OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "ONNX_NUM_THREADS",
+    "ORT_DISABLE_CPU_ARENA",          # disable ONNX CPU arena — stops 405GB prealloc
+    "ORT_ENABLE_CPU_MEM_ARENA",        # explicit disable (0 = arena disabled)
+):
+    if _var in ("ORT_DISABLE_CPU_ARENA", "ORT_ENABLE_CPU_MEM_ARENA"):
+        os.environ[_var] = os.environ.get(_var, "1")
+    else:
+        os.environ[_var] = os.environ.get(_var, "1")
+
+import numpy as np  # noqa: E402 — must be after ONNX_NUM_THREADS env vars above
 
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
-BASE_DIR         = Path(os.getenv("BASE_DIR",         "$DATA_DIR"))
-CHUNKS_DIR       = Path(os.getenv("CHUNKS_DIR",       "$DATA_DIR/chunks"))
-EMBEDDINGS_DIR   = Path(os.getenv("EMBEDDINGS_DIR",   "$DATA_DIR/embeddings"))
-LOG_DIR          = Path(os.getenv("LOG_DIR",          "$DATA_DIR/logs"))
-LOCK_FILE        = Path(os.getenv("LOCK_FILE",        "$DATA_DIR/.lock.embed_docs_cpu"))
-CHECKPOINT_FILE  = Path(os.getenv("CHECKPOINT_FILE",  "$DATA_DIR/.checkpoint.embed_docs_cpu.json"))
+BASE_DIR         = Path(os.getenv("BASE_DIR",         "../data"))
+CHUNKS_DIR       = Path(os.getenv("CHUNKS_DIR",       "../data/chunks"))
+EMBEDDINGS_DIR   = Path(os.getenv("EMBEDDINGS_DIR",   "../data/embeddings"))
+LOG_DIR          = Path(os.getenv("LOG_DIR",          "../data/logs"))
+LOCK_FILE        = Path(os.getenv("LOCK_FILE",        "../data/.lock.embed_docs_cpu"))
+CHECKPOINT_FILE  = Path(os.getenv("CHECKPOINT_FILE",  "../data/.checkpoint.embed_docs_cpu.json"))
 
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5")
 
 # Batch size for inference — keeps memory bounded on CPU
-BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "8"))
+BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "1"))
 
 
 # ── Checkpoint ────────────────────────────────────────────────────────────────
@@ -95,38 +106,47 @@ def log_event(level: str, doc_id: str | None, msg: str, extra: dict | None = Non
 _model = None
 
 
-def get_model() -> SentenceTransformer:
-    """Load and cache the sentence-transformer model (lazy singleton)."""
+def get_model():
+    """Load and cache the fastembed TextEmbedding model (lazy singleton)."""
     global _model
     if _model is None:
         print(f"    Loading {EMBEDDING_MODEL} on CPU ...", flush=True)
-        _model = SentenceTransformer(EMBEDDING_MODEL, device="cpu")
-        print(f"    Model loaded. Prompt names: {list(_model.prompts.keys())}", flush=True)
+        from fastembed import TextEmbedding
+        # enable_cpu_mem_arena=False: prevents ONNX from greedily pre-allocating
+        # a ~full-RAM arena (405GB on 56 cores). Only takes effect when passed
+        # at construction time, NOT via session options afterwards.
+        _model = TextEmbedding(
+            EMBEDDING_MODEL,
+            max_length=512,
+            threads=1,
+            enable_cpu_mem_arena=False,
+        )
+        print(f"    Model loaded. Embedding dim: {_model.embedding_size}", flush=True)
     return _model
 
 
 def embed_texts(texts: list[str], batch_size: int = BATCH_SIZE) -> np.ndarray:
-    """Embed a list of texts in batches using document-mode (no query prompt).
+    """Embed a list of texts one at a time to avoid ONNX activation memory accumulation.
 
-    sentence-transformers applies the model's configured pooling (lasttoken for
-    Qwen3-Embedding-0.6B) and returns already-normalized vectors.
+    ONNX CPU allocator holds intermediate tensors between forward passes within a
+    single session. Feeding all texts at once causes activations to stack up and
+    consume gigabytes. Processing one-at-a-time ensures each forward pass's
+    activations are released before the next.
 
-    Returns: (N, 1024) float32 array.
+    Returns: (N, 768) float32 array (NomicEmbedText = 768d).
     """
     model = get_model()
-
-    # Use "document" prompt — corpus chunks are documents, not queries.
-    # model.encode with prompt=None uses no prefix (correct for corpus chunks).
-    # The model has prompts={'query': ..., 'document': ''} per config.
-    embeddings = model.encode(
-        texts,
-        batch_size=batch_size,
-        prompt_name="document",
-        prompt=None,        # None = use prompt_name's default ('' for document)
-        normalize_embeddings=True,  # L2 normalize for cosine similarity
-        show_progress_bar=False,
-    )
-    return embeddings.astype(np.float32)
+    embeddings = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i : i + batch_size]
+        # Process one batch at a time; with batch_size=1 this feeds one chunk at a time,
+        # letting ONNX release activations between forward passes.
+        for text in batch:
+            # passage_embed yields one embedding at a time — consume and store immediately
+            for emb in model.passage_embed([text]):
+                embeddings.append(emb)
+                break  # one text -> one embedding
+    return np.stack(embeddings).astype(np.float32)
 
 
 # ── Core embedding ────────────────────────────────────────────────────────────
@@ -223,7 +243,7 @@ def run(doc_id_filter: str | None = None, dry_run: bool = False, force: bool = F
     # Filter out already-completed
     candidates = [d for d in candidates if d not in cp["completed"]]
 
-    print(f"embed_docs_cpu — CPU Embedding Stage (sentence-transformers + {EMBEDDING_MODEL})")
+    print(f"embed_docs_cpu — D2 Embedding (fastembed + {EMBEDDING_MODEL})")
     print(f"  Model:       {EMBEDDING_MODEL}")
     print(f"  Chunks dir:  {CHUNKS_DIR}")
     print(f"  Embeddings:  {EMBEDDINGS_DIR}")

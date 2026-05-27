@@ -6,13 +6,16 @@
  */
 
 import {
+	handleDocSearch,
+	handleDocSearchProvenance,
 	handleLoadMore,
 	handleNavPlain,
 	handleNavProvenance,
 	handleSearch,
 	handleSearchProvenance,
 	init as initApp,
-} from "./app.js";
+} from "./app2.js";
+import { getState } from "./state.js";
 
 // ─── Delegated click on resultsContainer ────────────────────────────────────────
 function initResultsContainerHandlers() {
@@ -50,7 +53,13 @@ function initResultsContainerHandlers() {
 			const direction = action.startsWith("prev") ? -1 : 1;
 
 			if (isProvenance) {
-				handleNavProvenance(docId, null, chunkIndex, collection, direction);
+				handleNavProvenance(
+					docId,
+					null,
+					chunkIndex,
+					collection,
+					direction,
+				);
 			} else {
 				handleNavPlain(docId, null, chunkIndex, collection, direction);
 			}
@@ -76,29 +85,68 @@ function initSearchHandlers() {
 	const searchInput = document.getElementById("searchInput");
 
 	// Regular search button
-	document.getElementById("searchBtn")?.addEventListener("click", () => {
-		handleSearch(searchInput?.value ?? "");
+		document.getElementById("searchBtn")?.addEventListener("click", () => {
+		const { _activeDocId, _activeCollection } = getState();
+		if (_activeDocId) {
+			handleDocSearch(_activeDocId, _activeCollection || "army", searchInput?.value ?? "");
+		} else {
+			handleSearch(searchInput?.value ?? "");
+		}
 	});
 
 	// Search with Provenance button
 	document
 		.getElementById("searchProvenanceBtn")
 		?.addEventListener("click", () => {
-			handleSearchProvenance(searchInput?.value ?? "");
+			const { _activeDocId, _activeCollection } = getState();
+			if (_activeDocId) {
+				// Doc-scoped mode: search within this document with provenance
+				handleDocSearchProvenance(
+					_activeDocId,
+					_activeCollection || "army",
+					searchInput?.value ?? "",
+				);
+			} else {
+				handleSearchProvenance(searchInput?.value ?? "");
+			}
 		});
 
-	// Enter key in search input — regular search
+	// Enter key in search input — fires whichever search mode is currently active
 	searchInput?.addEventListener("keypress", (e) => {
-		if (e.key === "Enter") handleSearch(searchInput.value);
+		if (e.key === "Enter") {
+			const { _activeDocId } = getState();
+
+			if (_activeDocId) {
+				// In document-scoped mode: search within this document
+				const { _activeCollection } = getState();
+				handleDocSearch(_activeDocId, _activeCollection || "army", searchInput.value);
+				return;
+			}
+
+			// Check if provenance button is visually active
+			const provBtn = document.getElementById("searchProvenanceBtn");
+			const provActive =
+				provBtn &&
+				(provBtn.classList.contains("active") ||
+					provBtn.getAttribute("aria-pressed") === "true" ||
+					provBtn.style.backgroundColor !== "");
+			if (provActive) {
+				handleSearchProvenance(searchInput.value);
+			} else {
+				handleSearch(searchInput.value);
+			}
+		}
 	});
 }
 
 // ─── Decode + payment modal handlers ───────────────────────────────────────────
 function initModalHandlers() {
 	const decodeModal = document.getElementById("decodeModal");
-	document.getElementById("decodeModalClose")?.addEventListener("click", () => {
-		if (decodeModal) decodeModal.style.display = "none";
-	});
+	document
+		.getElementById("decodeModalClose")
+		?.addEventListener("click", () => {
+			if (decodeModal) decodeModal.style.display = "none";
+		});
 	decodeModal?.addEventListener("click", (e) => {
 		if (e.target === decodeModal) decodeModal.style.display = "none";
 	});

@@ -1,6 +1,6 @@
 # RAG System — Admin Guide
 **Last updated:** 2026-04-02
-**Git:** `$REPO_DIR/` (git@github.com:youruser1/document_rag_system.git)
+**Git:** `./rag/` (git@github.com:blockops1/document_rag_system.git)
 
 This document tells you everything you need to know to operate the RAG system. Read this before doing anything with it.
 
@@ -65,7 +65,7 @@ PDF → A (fitz) → B (docling) → C (vision) → D (Qdrant)
 ## Directory Map
 
 ```
-$REPO_DIR/              ← Git working copy. All scripts live here.
+./rag/              ← Git working copy. All scripts live here.
   scripts/
     api_server.py               ← FastAPI server (port 8100)
     batch_ingest_branch.py      ← Pipeline A + B
@@ -154,28 +154,28 @@ print(dict(counts))
 
 ### Pipeline A (200 doc batch)
 ```bash
-cd $REPO_DIR
+cd ./rag
 source venv/bin/activate
 nohup ./scripts/run_pipeline_a.sh > logs/pipeline_a_latest.log 2>&1 &
 ```
 
 ### Pipeline B (daemon — processes extraction queue)
 ```bash
-cd $REPO_DIR
+cd ./rag
 source venv/bin/activate
 nohup ./scripts/run_pipeline_b.sh > logs/pipeline_b_latest.log 2>&1 &
 ```
 
 ### Pipeline C (vision)
 ```bash
-cd $REPO_DIR
+cd ./rag
 source venv/bin/activate
 nohup ./scripts/run_pipeline_c.sh > logs/pipeline_c_latest.log 2>&1 &
 ```
 
 ### Pipeline D (Qdrant index — NOT TESTED YET)
 ```bash
-cd $REPO_DIR
+cd ./rag
 source venv/bin/activate
 nohup ./scripts/run_pipeline_d.sh > logs/pipeline_d_latest.log 2>&1 &
 ```
@@ -270,9 +270,9 @@ VPS `rag-api.service` starts with old registry path. Fix before re-enabling push
 
 ## Git Workflow
 
-All scripts are git-tracked in `$REPO_DIR/`:
+All scripts are git-tracked in `./rag/`:
 ```bash
-cd $REPO_DIR
+cd ./rag
 git status                    # check what changed
 git add scripts/...           # stage specific files
 git commit -m "message"       # commit

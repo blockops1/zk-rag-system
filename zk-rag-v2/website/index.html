@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Military Manuals — Military Doctrine RAG API</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -15,6 +16,8 @@
     }
     .container { max-width: 900px; margin: 0 auto; }
     h1 { color: #fff; margin-bottom: 10px; }
+    h1 a { color: inherit; text-decoration: none; }
+    h1 a:hover { text-decoration: underline; }
     h2 { color: #fff; margin: 30px 0 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
     .hero { background: #16213e; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
     .hero p { color: #b0b0b0; }
@@ -90,8 +93,22 @@
     }
     .search-box button:hover { background: #4a9fd9; }
     .search-box button:disabled { background: #555; cursor: not-allowed; }
+    .collection-search-box select {
+      background: #0f0f23;
+      color: #e0e0e0;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 0.95em;
+      font-family: inherit;
+      cursor: pointer;
+      min-width: 130px;
+    }
+    .collection-search-box select:focus { outline: none; border-color: #64b5f6; }
     #searchProvenanceBtn { background: #f0a500; color: #1a1a2e; }
     #searchProvenanceBtn:hover { background: #d4940a; }
+    #collectionSearchProvenanceBtn { background: #f0a500; color: #1a1a2e; }
+    #collectionSearchProvenanceBtn:hover { background: #d4940a; }
     .results-section { margin-top: 20px; }
     .results-header { color: #fff; margin-bottom: 15px; font-size: 1.1em; }
     .document-header {
@@ -117,6 +134,46 @@
     .passage-links { display: flex; gap: 15px; flex-wrap: wrap; }
     .passage-link { color: #64b5f6; text-decoration: none; font-size: 0.9em; }
     .passage-link:hover { text-decoration: underline; }
+    .doc-scoped-banner {
+      background: #16213e;
+      border: 1px solid #2a4a8a;
+      border-radius: 6px;
+      padding: 10px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9em;
+    }
+    .doc-scoped-banner span { color: #b0b0b0; }
+    .doc-scoped-banner a { color: #64b5f6; text-decoration: none; }
+    .doc-scoped-banner a:hover { text-decoration: underline; }
+    /* Search-bar scope label (shown below search box after a search) */
+    .search-scope-label {
+      color: #888;
+      font-size: 0.85em;
+      margin-bottom: 12px;
+      padding: 6px 10px;
+      background: #0f0f23;
+      border: 1px solid #2a2a4a;
+      border-radius: 4px;
+      display: inline-block;
+    }
+    /* Results-area scope banner (shown above results) */
+    .results-scope-banner {
+      background: #0f0f23;
+      border: 1px solid #2a4a8a;
+      border-radius: 6px;
+      padding: 10px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9em;
+    }
+    .results-scope-icon { font-size: 1.1em; }
+    .results-scope-text { color: #b0b0b0; }
+    .results-scope-text strong { color: #e0e0e0; }
     /* Source PDF download button */
     .download-pdf-btn {
       background: #2a5a3a;
@@ -427,26 +484,48 @@
 </head>
 <body>
   <div class="container">
-    <h1>Military Manuals — Military Doctrine RAG API</h1>
-    
+    <h1><a href="/">Military Manuals — Military Doctrine RAG API</a></h1>
+
     <div class="hero">
       <p>Search and retrieve information from military doctrine documents using natural language queries. Our RAG (Retrieval-Augmented Generation) API provides semantic search across curated military publications, enabling fast access to relevant operational guidance and procedures.</p>
     </div>
 
-    <!-- Live Search Section -->
+    <div class="catalog-link">
+      <a href="/catalog.html">Browse document catalog →</a>
+    </div>
+
+    <!-- ── Search Section 1: Full Corpus ───────────────────────────────── -->
     <div class="search-section">
-      <h2>Live Search</h2>
+      <h2>🔎 Search Full Corpus</h2>
       <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Search military doctrine...">
+        <input type="text" id="searchInput" placeholder="Search military doctrine…">
         <button id="searchBtn">Search</button>
         <button id="searchProvenanceBtn">Search with Provenance</button>
       </div>
-      <div class="catalog-link">
-        <a href="/catalog.html">Browse document catalog →</a>
-      </div>
-
-      <div id="resultsContainer" class="results-section"></div>
+      <div id="searchScopeLabel" class="search-scope-label" style="display:none;"></div>
     </div>
+
+    <!-- ── Search Section 2: Within Collection ───────────────────────── -->
+    <div class="search-section">
+      <h2>📁 Search Within Collection</h2>
+      <div class="search-box collection-search-box">
+        <select id="collectionSelect">
+          <option value="army">Army</option>
+          <option value="navy">Navy</option>
+          <option value="marines">Marines</option>
+          <option value="coast_guard">Coast Guard</option>
+          <option value="air_force">Air Force</option>
+          <option value="other">Other</option>
+        </select>
+        <input type="text" id="collectionSearchInput" placeholder="Search within collection…">
+        <button id="collectionSearchBtn">Search</button>
+        <button id="collectionSearchProvenanceBtn">Search with Provenance</button>
+      </div>
+      <div id="collectionScopeLabel" class="search-scope-label" style="display:none;"></div>
+    </div>
+
+    <!-- ── Results (shared by both searches) ─────────────────────────── -->
+    <div id="resultsContainer" class="results-section"></div>
 
     <h2>Collections</h2>
     <table id="collectionsTable">
@@ -556,7 +635,7 @@
       fetchZKProof, submitProof, getProofStatus,
       fetchCollections,
       fetchSourceInfo, fetchSourcePdf,
-    } from './js/api.js';
+    } from './js/api2.js';
     import {
       getState, setState, resetState,
       getZkCache, setZkCache, seedZkCacheFromResults,
@@ -571,8 +650,8 @@
       buildLoadingHtml, buildErrorHtml, buildEmptyHtml,
       escapeHtml, extractPages
     } from './js/renderer.js';
-
-    // Expose all imports on window for the legacy inline script
+    import { init as initEventHandlers } from './js/event-handlers.js';
+    import { init as initApp } from './js/app2.js';
     window.searchChunks = searchChunks;
     window.fetchContextNav = fetchContextNav;
     window.fetchImageList = fetchImageList;
@@ -604,9 +683,6 @@
     window.buildEmptyHtml = buildEmptyHtml;
     window.escapeHtml = escapeHtml;
     window.extractPages = extractPages;
-
-    import { init as initEventHandlers } from './js/event-handlers.js';
-    import { init as initApp } from './js/app.js';
 
     /*
      * WEBSITE-007 backwards-compatibility note:
@@ -666,6 +742,7 @@
       <h3>🔍 ZK Proof Explanation</h3>
       <div id="decodeModalBody"></div>
     </div>
+  </div>
   </div>
 </body>
 </html>

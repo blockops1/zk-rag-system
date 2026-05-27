@@ -39,8 +39,8 @@ from pathlib import Path
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-MERKLE_TREES_DIR = Path("$DATA_DIR/merkle_trees")
-REGISTRY_PATH    = Path("$DATA_DIR/registry.json")
+MERKLE_TREES_DIR = Path("../data/merkleTrees")
+REGISTRY_PATH    = Path("../data/registry.json")
 LOG_DIR          = Path("/data/logs")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

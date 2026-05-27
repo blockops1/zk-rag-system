@@ -18,9 +18,9 @@ from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-REGISTRY_PATH = Path("$DATA_DIR/registry.json")
+REGISTRY_PATH = Path("../data/registry.json")
 RPC_URL = "https://horizen-testnet.rpc.caldera.xyz"
-CAST_BIN = "$FOUNDRY_BIN/cast"
+CAST_BIN = "./foundry-bin/cast"
 
 
 def load_registry() -> tuple[dict, dict]:

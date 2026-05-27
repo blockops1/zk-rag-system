@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Search Within Document — Military Doctrine RAG</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      line-height: 1.6;
+      padding: 20px;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { color: #fff; margin-bottom: 10px; }
+    h2 { color: #fff; margin: 30px 0 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+    .hero { background: #16213e; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    .hero p { color: #b0b0b0; }
+    code { background: #0f0f23; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+
+    /* Search UI styles */
+    .search-section { background: #16213e; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    .search-box { display: flex; gap: 10px; margin-bottom: 15px; }
+    .search-box input {
+      flex: 1;
+      background: #0f0f23;
+      color: #e0e0e0;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 0.95em;
+    }
+    .search-box input:focus { outline: none; border-color: #64b5f6; }
+    .search-box button {
+      background: #2196f3;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 20px;
+      font-size: 0.95em;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    .search-box button:hover { background: #4a9fd9; }
+    .search-box button:disabled { background: #555; cursor: not-allowed; }
+    .search-box .provenance-btn { background: #f0a500; color: #1a1a2e; }
+    .search-box .provenance-btn:hover { background: #d4940a; }
+    .search-box .provenance-btn:disabled { background: #555; color: #aaa; cursor: not-allowed; }
+
+    /* Doc header */
+    .doc-header {
+      background: #16213e;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+    .doc-header h2 { margin: 0 0 6px; border: none; padding: 0; color: #fff; }
+    .doc-meta { color: #888; font-size: 0.88em; }
+
+    /* Results */
+    .results-section { margin-top: 20px; }
+    footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #333; color: #888; font-size: 0.9em; }
+    footer a { color: #64b5f6; }
+
+    .load-more-wrapper { text-align: center; margin: 24px 0; }
+    .load-more-btn {
+      background: #1a3354; color: #64b5f6; border: 1px solid #2a4a7a;
+      border-radius: 8px; padding: 12px 32px; font-size: 0.95em; cursor: pointer;
+      transition: background 0.2s;
+    }
+    .load-more-btn:hover { background: #243f6a; }
+    .load-more-btn:disabled { opacity: 0.6; cursor: default; }
+
+    /* ─── Full result card styles (from index.html) ─────────────────────────── */
+
+    /* Document group header */
+    .document-header {
+      background: #16213e;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      border-left: 3px solid #64b5f6;
+    }
+    .document-title { color: #fff; font-weight: 600; font-size: 1.1em; margin-bottom: 8px; }
+    .document-title .doc-title-link { color: #93c5fd; text-decoration: none; }
+    .document-title .doc-title-link:hover { color: #bfdbfe; text-decoration: underline; }
+    .document-summary { color: #888; font-size: 0.85em; }
+
+    /* Passage card */
+    .passage-card {
+      background: #0f0f23;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      border-left: 3px solid #4a9fd9;
+    }
+    .passage-page { color: #64b5f6; font-size: 0.85em; margin-bottom: 8px; }
+    .passage-excerpt { color: #b0b0b0; font-size: 0.95em; margin-bottom: 10px; }
+    .passage-links { display: flex; gap: 15px; flex-wrap: wrap; }
+    .passage-link { color: #64b5f6; text-decoration: none; font-size: 0.9em; }
+    .passage-link:hover { text-decoration: underline; }
+    .result-score { color: #888; font-size: 0.85em; margin-bottom: 5px; }
+    .doc-id-display { color: #666; font-size: 0.8em; cursor: default; }
+
+    /* Doc-scoped banner */
+    .doc-scoped-banner {
+      background: #16213e;
+      border: 1px solid #2a4a8a;
+      border-radius: 6px;
+      padding: 10px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9em;
+    }
+    .doc-scoped-banner span { color: #b0b0b0; }
+    .doc-scoped-banner a { color: #64b5f6; text-decoration: none; }
+    .doc-scoped-banner a:hover { text-decoration: underline; }
+
+    /* Results scope banner */
+    .results-scope-banner {
+      background: #0f0f23;
+      border: 1px solid #2a4a8a;
+      border-radius: 6px;
+      padding: 10px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9em;
+    }
+    .results-scope-icon { font-size: 1.1em; }
+    .results-scope-text { color: #b0b0b0; }
+
+    /* Navigation buttons */
+    .nav-buttons { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+    .chunk-nav-btn {
+      background: #16213e; color: #64b5f6; border: 1px solid #333;
+      padding: 6px 12px; border-radius: 4px; font-size: 0.85em; cursor: pointer;
+    }
+    .chunk-nav-btn:hover:not(:disabled) { background: #1f2a4a; }
+    .chunk-nav-btn:disabled { color: #555; border-color: #333; cursor: not-allowed; }
+    .chunk-nav-btn.provenance { color: #f0a500; border-color: #f0a500; }
+    .chunk-nav-btn.provenance:hover:not(:disabled) { background: #2a2a1a; }
+
+    /* Inline image */
+    .doc-image { max-width: 100%; margin: 8px 0; border-radius: 4px; }
+
+    /* ZK status badge */
+    .zk-status-badge {
+      color: #888; font-size: 0.9em; cursor: pointer;
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      transition: color 0.2s, background 0.2s;
+    }
+    .zk-status-badge:hover { background: #1f2f4f; color: #64b5f6; }
+    .zk-status-badge.verified { color: #4ade80; cursor: pointer; }
+    .zk-status-badge.failed { color: #ff8a8a; cursor: pointer; }
+
+    /* Download proof */
+    .zk-download-btn { color: #64b5f6; text-decoration: none; font-size: 0.9em; }
+    .zk-download-btn:hover { text-decoration: underline; }
+
+    /* Download PDF button */
+    .download-pdf-btn {
+      background: #2a5a3a; color: #4ade80; border: 1px solid #3a7a4a;
+      border-radius: 4px; padding: 5px 12px; font-size: 0.85em; font-weight: 600;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+    }
+    .download-pdf-btn:hover { background: #3a6a4a; }
+    .download-pdf-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .download-pdf-btn.loading { opacity: 0.7; cursor: wait; }
+
+    /* Hide injected chunk */
+    .hide-chunk-btn {
+      background: none; border: none; color: #888; cursor: pointer;
+      font-size: 0.85em; padding: 4px 8px; border-radius: 4px; margin-top: 8px;
+    }
+    .hide-chunk-btn:hover { background: #1f2a4a; color: #e0e0e0; }
+
+    /* Error / loading */
+    .loading { text-align: center; padding: 20px; color: #888; }
+    .error { background: #3a1a1a; border-left-color: #ff6b6b; padding: 15px; border-radius: 6px; color: #ff8a8a; }
+
+    /* Decode modal */
+    .decode-modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7); display: flex; align-items: center;
+      justify-content: center; z-index: 1100;
+    }
+    .decode-modal {
+      background: #16213e; border: 1px solid #333; border-radius: 10px;
+      padding: 25px; max-width: 600px; width: 90%; max-height: 80vh;
+      overflow-y: auto; position: relative;
+    }
+    .decode-modal h3 { color: #fff; margin-bottom: 15px; font-size: 1.05em; }
+    .decode-modal .modal-close {
+      position: absolute; top: 12px; right: 15px; background: none;
+      border: none; color: #888; font-size: 1.2em; cursor: pointer;
+    }
+    .decode-modal .modal-close:hover { color: #e0e0e0; }
+    .decode-section-title { color: #fff; font-size: 0.95em; font-weight: 600; margin: 15px 0 8px; }
+    .decode-success { color: #4ade80; background: #1a3a2a; padding: 10px 14px; border-radius: 6px; border-left: 3px solid #4ade80; margin-bottom: 15px; }
+    .decode-error { color: #ff8a8a; background: #3a1a1a; padding: 10px 14px; border-radius: 6px; border-left: 3px solid #ff6b6b; }
+
+    /* Toast */
+    #zk-toast {
+      position: fixed; bottom: 24px; right: 24px; background: #1a1a2e;
+      color: #e0e0e0; padding: 12px 20px; border-radius: 8px;
+      border: 1px solid #333; font-size: 14px; z-index: 99999;
+      max-width: 320px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      transition: opacity 0.3s ease;
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 10px; }
+      .search-box { flex-direction: column; }
+      .passage-links { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Site header — same as main page -->
+  <h1><a href="/">Military Manuals — Military Doctrine RAG API</a></h1>
+
+  <!-- Back to Search + Browse Catalog -->
+  <div class="back-home">
+    <a href="/" style="color:#64b5f6; text-decoration:none; font-size:0.9em;">← Back to Search</a>
+    <span style="color:#555; margin: 0 8px;">|</span>
+    <a href="/catalog.html" style="color:#64b5f6; text-decoration:none; font-size:0.9em;">📚 Browse Catalog</a>
+  </div>
+
+  <h2 style="margin-top:16px;">🔍 Search Within Document</h2>
+  <p id="docTitle" class="hero">Loading document…</p>
+
+  <!-- Search bar -->
+  <div class="search-section">
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="Search within this document…">
+      <button id="searchBtn">Search</button>
+      <button id="searchProvenanceBtn" class="provenance-btn">Search with Provenance</button>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="resultsContainer" class="results-section"></div>
+
+</div>
+
+<!-- Decode / Results modal -->
+<div id="decodeModal" class="decode-modal-overlay" style="display:none;">
+  <div class="decode-modal">
+    <button class="modal-close" id="decodeModalClose">×</button>
+    <div id="decodeModalBody"></div>
+  </div>
+</div>
+
+<!-- App JS -->
+<script type="module">
+import { init as initApp } from '/js/app2.js';
+import { init as initHandlers } from '/js/event-handlers.js';
+import { handleDocSearch, handleDocSearchProvenance } from '/js/app2.js';
+import {
+  fetchImageList,
+  fetchZKProof,
+  fetchContextNav,
+  submitProof,
+  getProofStatus,
+  fetchSourceInfo,
+  fetchSourcePdf,
+} from '/js/api2.js';
+import { setState, getState } from '/js/state.js';
+import {
+  buildPassageCard,
+  buildEmptyHtml,
+  escapeHtml,
+} from '/js/renderer.js';
+
+// ── Window bindings needed by app2.js / event-handlers ──────────────────────
+window.fetchImageList = fetchImageList;
+window.fetchZKProof = fetchZKProof;
+window.fetchContextNav = fetchContextNav;
+window.submitProof = submitProof;
+window.getProofStatus = getProofStatus;
+window.fetchSourceInfo = fetchSourceInfo;
+window.fetchSourcePdf = fetchSourcePdf;
+window.getState = getState;
+window.setState = setState;
+window.buildPassageCard = buildPassageCard;
+window.buildEmptyHtml = buildEmptyHtml;
+window.escapeHtml = escapeHtml;
+window.handleDocSearch = handleDocSearch;
+window.handleDocSearchProvenance = handleDocSearchProvenance;
+
+// DOM refs — same IDs as index.html so app2.js + eventHandlers work unchanged
+const _searchInput    = document.getElementById('searchInput');
+const _searchBtn      = document.getElementById('searchBtn');
+const _resultsContainer = document.getElementById('resultsContainer');
+const _docTitle       = document.getElementById('docTitle');
+
+// ── Doc info from URL ─────────────────────────────────────────────────────────
+function getDocInfoFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    docId:      params.get('doc_id') || '',
+    collection: params.get('collection') || 'army',
+    title:      params.get('title') || 'Document',
+    branch:     params.get('branch') || '',
+  };
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  const { docId, collection, title, branch } = getDocInfoFromUrl();
+
+  if (!docId) {
+    _docTitle.textContent = 'No document selected.';
+    return;
+  }
+
+  // Show doc title
+  _docTitle.innerHTML = `<strong style="color:#fff">${title || 'Document'}</strong>${branch ? ` <span style="color:#888">(${branch})</span>` : ''}`;
+
+  // Wire up event handlers (search button, enter key, result clicks, ZK badges)
+  initApp();    // Sets up DOM refs in app2.js + wires ZK badge listeners
+  initHandlers(); // Sets up search handlers in event-handlers.js
+
+  // Set _activeDocId and _searchScope so eventHandlers knows we're in doc-scoped mode
+  setState({ _activeDocId: docId, _activeCollection: collection, _searchScope: 'DOCUMENT' });
+
+  // Wire Search with Provenance button for doc-scoped mode
+  // Stop propagation so initSearchHandlers() in event-handlers.js doesn't also fire
+  // (event-handlers wires this button to handleDocSearch which lacks provenance + collection params)
+  const provBtn = document.getElementById('searchProvenanceBtn');
+  provBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const q = _searchInput?.value ?? '';
+    window.handleDocSearchProvenance(docId, collection, q);
+  });
+
+  // Pre-fill search input if 'q' param present
+  const params = new URLSearchParams(window.location.search);
+  const q = params.get('q');
+  if (q) {
+    _searchInput.value = q;
+    handleDocSearch(docId, collection, q);
+  } else {
+    // Show first 5 chunks as initial context
+    handleDocSearch(docId, collection, '');
+  }
+}
+
+init();
+</script>
+</body>
+</html>

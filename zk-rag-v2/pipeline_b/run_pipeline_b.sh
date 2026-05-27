@@ -1,7 +1,7 @@
 #!/bin/bash
 # run_pipeline_b.sh — Pipeline B: continuous docling loop with stale-lock recovery
 #
-# Lock: $DATA_DIR/.lock.pipeline_b
+# Lock: ../data/.lock.pipeline_b
 #   - Non-blocking flock — fails immediately if another instance is running
 #   - On stale lock → remove and retry once
 #
@@ -10,14 +10,14 @@
 # Cron kicks it off at 09:30 ET; it drains the queue and exits cleanly.
 #
 # Prerequisites: rag-api.service must be running
-# Entry: $DATA_DIR/extraction_queue.json
+# Entry: ../data/extraction_queue.json
 # Exit: needs_docling list empty, or API unreachable
 
 set -euo pipefail
 
-LOCK_FILE="$DATA_DIR/.lock.pipeline_b"
-LOG_DIR="$REPO_DIR/logs"
-VENV_PY="$REPO_DIR/venv/bin/python3"
+LOCK_FILE="../data/.lock.pipeline_b"
+LOG_DIR="./logs"
+VENV_PY="./venv/bin/python3"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG="${LOG_DIR}/pipeline_b_${TIMESTAMP}.log"
 
@@ -69,7 +69,7 @@ queue_count() {
     python3 -c "
 import json, sys
 try:
-    with open('$DATA_DIR/extraction_queue.json') as f:
+    with open('../data/extraction_queue.json') as f:
         data = json.load(f)
     print(len(data.get('extraction_queue', [])))
 except (FileNotFoundError, json.JSONDecodeError):

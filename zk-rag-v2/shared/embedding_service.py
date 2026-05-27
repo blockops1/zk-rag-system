@@ -29,7 +29,7 @@ from sentence_transformers import SentenceTransformer
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
-LOG_DIR = "$DATA_DIR/logs"
+LOG_DIR = "../data/logs"
 LOG_FILE = f"{LOG_DIR}/embedding_service.log"
 os.makedirs(LOG_DIR, exist_ok=True)
 

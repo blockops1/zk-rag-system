@@ -42,3 +42,4 @@ broadcast/
 
 # Volume-level archive (not in git)
 archive/
+.env.systemd

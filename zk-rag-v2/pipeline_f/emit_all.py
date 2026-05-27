@@ -2,7 +2,7 @@
 """
 emit_all.py -- Batch emit Merkle roots to MerkleRootRegistry V2 contract.
 
-Reads doc_ids from tree files in $DATA_DIR/merkle_trees/, looks up
+Reads doc_ids from tree files in ../data/merkleTrees/, looks up
 merkle_root and pdf_hash from tree JSON / registry, calls AppendRootV2.s.sol,
 and writes emission records back to the registry.
 
@@ -40,9 +40,9 @@ from pathlib import Path
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-MERKLE_TREES_DIR = Path("$DATA_DIR/merkle_trees")
-REGISTRY_PATH    = Path("$DATA_DIR/registry.json")
-LOG_DIR          = Path("/data/logs")
+MERKLE_TREES_DIR = Path("../data/merkleTrees")
+REGISTRY_PATH    = Path("../data/registry.json")
+LOG_DIR          = Path("../data/logs")
 
 # Active network selection — read from .env ACTIVE_NETWORK (testnet | mainnet)
 _ACTIVE_NETWORK = os.environ.get("ACTIVE_NETWORK", "testnet").strip().lower()
@@ -139,7 +139,7 @@ def load_registry() -> tuple[dict, dict]:
     return registry_data, doc_id_index
 
 
-LOCK_PATH = Path("$DATA_DIR/registry.lock")
+LOCK_PATH = Path("../data/registry.lock")
 
 def save_registry(registry_data: dict) -> None:
     """Atomically write registry with exclusive file lock to prevent concurrent writes."""
@@ -433,6 +433,9 @@ def run_append_root_v2(
             f.write(out)
             f.write("\n")
 
+    # Rate-limit: 100ms pause between Forge invocations to avoid RPC 429s
+    time.sleep(0.1)
+
     try:
         result = subprocess.run(
             cmd,
@@ -470,7 +473,8 @@ def run_append_root_v2(
                             bn = receipt.get("blockNumber", "")
                             status = receipt.get("status", "")
                             print(f"    receipt: tx_hash={h[:20] if h else ''}... block={bn} status={status}")
-                            if h.startswith("0x") and len(h) == 66:
+                            # Only treat as success if on-chain status is 1 (confirmed)
+                            if h.startswith("0x") and len(h) == 66 and status == "0x1":
                                 tx_hash = h
                                 block_number = str(int(bn, 16)) if bn else "0"
                                 print(f"  [run_append_root_v2] MATCHED tx_hash={tx_hash}  block_number={block_number}")
@@ -686,7 +690,10 @@ def run_batch_forge(
                 # Refresh nonce from RPC before each forge call to avoid stale cache
                 nonce = _get_current_nonce()
                 if nonce is not None:
-                    cmd += ["--nonce", str(nonce)]
+                    env["ETH_NONCE"] = str(nonce)
+
+            # Rate-limit: 100ms pause between Forge invocations to avoid RPC 429s
+            time.sleep(0.1)
 
             with open(debug_log_path, "a") as f:
                 f.write(f"\n===== {datetime.now(timezone.utc).isoformat()} [BATCH {batch_num}.{sub_batch_num}] =====\n")
@@ -734,7 +741,8 @@ def run_batch_forge(
                             data = json.load(bf)
                         for receipt in data.get("receipts", []):
                             h = receipt.get("transactionHash", "")
-                            if h.startswith("0x") and len(h) == 66:
+                            # Only treat as success if on-chain status is 1 (confirmed)
+                            if h.startswith("0x") and len(h) == 66 and receipt.get("status") == "0x1":
                                 tx_hash = h
                                 block_number = str(int(receipt.get("blockNumber", "0x0"), 16))
                                 break
@@ -985,7 +993,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true",
                         help="Show what would be emitted without broadcasting")
     parser.add_argument("--batch", action="store_true",
-                        help="Emit all documents in merkle_trees/")
+                        help="Emit all documents in merkleTrees/")
     parser.add_argument("--doc-id", type=str,
                         help="Emit a single document by doc_id")
     parser.add_argument("--limit", type=int, metavar="N",

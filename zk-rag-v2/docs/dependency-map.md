@@ -4,8 +4,7 @@
 
 | File | How it's used |
 |------|---------------|
-| `shared/api_server.py` | systemd service (`rag-api-local.service`), port 8100 |
-| `shared/embedding_service.py` | systemd service, port 8200 |
+| `shared/api_server.py` | systemd service (`rag-api-local.service`), port 8100; handles embedding in-process (fastembed + NomicEmbedText-v1.5, 768d) |
 | `shared/provenance.py` | imported by api_server |
 | `shared/_log.py` | imported by pipeline scripts |
 | `shared/batch_ingest_branch.py` | `pipeline_a/run_pipeline_a.sh` |
@@ -27,7 +26,7 @@
 
 ## Archived Files
 
-All archived to `$DATA_DIR/archive/2026-04-25-orphans/` (not in git).
+All archived to `.<DATA>/archive/2026-04-25-orphans/` (not in git).
 
 ### Pipeline A
 - `pipeline_a/ingest_pdf.py` — superseded by `batch_ingest_branch.py`
@@ -47,7 +46,7 @@ All archived to `$DATA_DIR/archive/2026-04-25-orphans/` (not in git).
 - `pipeline_d/sync_registry_embeddings.py` — ops tool, can re-enable if needed
 - `pipeline_d/sync_registry_emission.py` — ops tool, can re-enable if needed
 - `pipeline_d/sync_registry_from_chunks.py` — ops tool, can re-enable if needed
-- `pipeline_d/sync_registry_merkle_trees.py` — ops tool, can re-enable if needed
+- `pipeline_d/sync_registry_merkleTrees.py` — ops tool, can re-enable if needed
 
 ### Shared
 - `shared/bm25.py` — BM25 fully disabled, removed from api_server and pipeline_g
@@ -82,14 +81,24 @@ All archived to `$DATA_DIR/archive/2026-04-25-orphans/` (not in git).
 | Service | Unit file | Port |
 |---------|-----------|------|
 | RAG API server | `rag-api-local.service` | 8100 |
-| Embedding service | `embedding_service.py` (manual) | 8200 |
+| Qdrant | `qdrant.service` | 6333 |
+
+**Note:** The standalone `embedding-service.service` (port 8200) was stopped and disabled 2026-05-12. Embedding is now handled in-process by `api_server.py` via fastembed + NomicEmbedText-v1.5 (768d).
+
+## API Extensions (docsearch provenance — added 2026-05-26)
+
+The following API features support doc-scoped provenance search:
+
+- `GET /api/context?doc_id=…&chunk_index=…&limit=N` — returns N consecutive chunks; enables multi-chunk initial display in docsearch.html
+- `POST /api/query-provable` — accepts optional `doc_id` field to scope provenance search to a single document
+- `GET /api/catalog?collection=…` — returns document manifest with titles, branches, and page counts
 
 ## Key Paths
 
-- Registry: `$DATA_DIR/registry.json`
-- Merkle trees: `$DATA_DIR/merkle_trees/`
-- Chunks: `$DATA_DIR/chunks/`
-- Embeddings: `$DATA_DIR/embeddings/`
-- Source PDFs: `$DATA_DIR/source_pdfs/`
-- Archive: `$DATA_DIR/archive/`
-- Qdrant: `$DATA_DIR/qdrant/`
+- Registry: `.<DATA>/registry.json`
+- Merkle trees: `.<DATA>/merkleTrees/`
+- Chunks: `.<DATA>/chunks/`
+- Embeddings: `.<DATA>/embeddings/`
+- Source PDFs: `.<DATA>/sourcePDF/`
+- Archive: `.<DATA>/archive/`
+- Qdrant: `.<DATA>/qdrant/`

@@ -4,12 +4,19 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check js/",
+    "lint:fix": "biome check --write js/",
+    "format": "biome format --write js/",
+    "ci": "biome ci js/"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@biomejs/biome": "^2.4.13"
+    "@biomejs/biome": "^2.4.13",
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.7"
   }
 }

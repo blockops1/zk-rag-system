@@ -1,7 +1,7 @@
 #!/bin/bash
 # run_pipeline_d.sh — Pipeline D: Qdrant index (THE ONLY QDRANT WRITE POINT)
 #
-# Lock: $DATA_DIR/.lock.pipeline_d
+# Lock: ../data/.lock.pipeline_d
 #   - Blocking flock — waits for exclusive lock
 #   - On stale lock → remove and retry once
 #
@@ -15,10 +15,10 @@
 
 set -euo pipefail
 
-LOCK_FILE="$DATA_DIR/.lock.pipeline_d"
-LOG_DIR="$REPO_DIR/logs"
-VENV_PY="$REPO_DIR/venv/bin/python3"
-SCRIPT_DIR="$REPO_DIR/shared"
+LOCK_FILE="../data/.lock.pipeline_d"
+LOG_DIR="./logs"
+VENV_PY="./venv/bin/python3"
+SCRIPT_DIR="./shared"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG="${LOG_DIR}/pipeline_d_${TIMESTAMP}.log"
 

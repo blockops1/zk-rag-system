@@ -5,14 +5,14 @@
 #   ./run_pipeline_e.sh --doc-id <doc_id>           Single doc
 #   ./run_pipeline_e.sh --batch [--force]           All docs with chunks
 #
-# Requires DEPLOYER_KEY env var (sourced from $REPO_DIR/.env).
-# Pipeline E binary is at: $REPO_DIR/zk-circuit/target/debug/pipeline_e
+# Requires DEPLOYER_KEY env var (sourced from ./.env).
+# Pipeline E binary is at: ./zk-circuit/target/debug/pipeline_e
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ZK_CIRCUIT_DIR="$REPO_DIR/zk-circuit"
-SOURCE_ENV="$REPO_DIR/.env"
+ZK_CIRCUIT_DIR="./zk-circuit"
+SOURCE_ENV="./.env"
 
 if [[ -f "$SOURCE_ENV" ]]; then
     set -a
@@ -20,7 +20,7 @@ if [[ -f "$SOURCE_ENV" ]]; then
     set +a
 fi
 
-PIPELINE_E="$ZK_CIRCUIT_DIR/target/debug/pipeline_e"
+PIPELINE_E="$ZK_CIRCUIT_DIR/target/release/pipeline_e"
 UPDATE_REG="$SCRIPT_DIR/update_registry.py"
 
 if [[ ! -x "$PIPELINE_E" ]]; then
@@ -56,8 +56,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-CHUNKS_DIR="$DATA_DIR/chunks"
-OUT_DIR="$DATA_DIR/merkle_trees"
+CHUNKS_DIR="../data/chunks"
+OUT_DIR="../data/merkleTrees"
 
 if [[ "$BATCH_MODE" == "true" ]]; then
     echo "=== Pipeline E (batch mode) ==="
@@ -75,7 +75,7 @@ if [[ "$BATCH_MODE" == "true" ]]; then
     echo ""
     echo "=== Updating registry for batch ==="
     grep "Wrote" /tmp/pipeline_e_batch.log | while read -r line; do
-        # Extract doc_id from path like "$DATA_DIR/merkle_trees/<doc_id>_tree.json"
+        # Extract doc_id from path like "../data/merkleTrees/<doc_id>_tree.json"
         DOC_ID_FROM_LINE=$(echo "$line" | grep -oP '(?<=/)\w{64}(?=_tree\.json)')
         if [[ -n "$DOC_ID_FROM_LINE" ]]; then
             python3 "$UPDATE_REG" "$DOC_ID_FROM_LINE" || true

@@ -6,7 +6,7 @@ import os
 import time
 import sys
 
-registry = json.load(open('$DATA_DIR/registry.json'))
+registry = json.load(open('../data/registry.json'))
 
 # Get unemitted doc_ids from tree idx 4 onwards
 remaining = []

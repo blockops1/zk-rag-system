@@ -24,7 +24,7 @@ PDF → A (fitz) → B (docling) → C (vision) → D (Qdrant)
 ## Repository Structure
 
 ```
-$REPO_DIR/              ← git working copy
+./rag/              ← git working copy
   scripts/                       ← Active pipeline scripts
     api_server.py               ← FastAPI query server (port 8100)
     batch_ingest_branch.py      ← Pipeline A + B
@@ -55,7 +55,7 @@ $REPO_DIR/              ← git working copy
 ## Quick Start
 
 ```bash
-cd $REPO_DIR
+cd ./rag
 source venv/bin/activate
 
 # Check status

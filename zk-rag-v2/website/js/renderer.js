@@ -10,11 +10,34 @@
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Escape HTML special characters to prevent XSS. */
+/**
+ * Escape HTML special characters to prevent XSS.
+ * Unlike textContent-only escaping, this also escapes double-quotes
+ * so the result is safe for both text content AND attribute contexts.
+ */
 export function escapeHtml(text) {
-	const div = document.createElement("div");
-	div.textContent = text;
-	return div.innerHTML;
+	if (text === null || text === undefined) return "";
+	const str = String(text);
+	const map = {
+		"&": "&amp;",
+		"<": "&lt;",
+		">": "&gt;",
+		'"': "&quot;",
+		"'": "&#39;",
+	};
+	return str.replace(/[&<>"']/g, (c) => map[c]);
+}
+
+/**
+ * Sanitize a URL for use in href/src attributes.
+ * Rejects javascript:, data:, and other dangerous schemes.
+ * Returns null if the URL is invalid or disallowed.
+ */
+function safeUrl(url) {
+	if (!url || typeof url !== "string") return null;
+	const trimmed = url.trim();
+	if (/^https?:\/\//i.test(trimmed)) return trimmed;
+	return null;
 }
 
 /**
@@ -43,38 +66,42 @@ export function extractPages(text, fallbackPage) {
  *
  * @param {string} docId
  * @param {Array} passages  — chunks belonging to this document
- * @param {Array} _allResults  — (unused, kept for signature compatibility)
+ * @param {boolean} [isDocScoped=false]  — if true, shows "Viewing all N passages in this document"
  * @returns {string} HTML
  */
-export function buildDocGroupHtml(docId, passages) {
+export function buildDocGroupHtml(docId, passages, isDocScoped = false) {
 	if (!passages.length) return "";
 	const firstPassage = passages[0];
-	const metadata = firstPassage.metadata || {};
 	const title = firstPassage.title || "Untitled";
-	const docType = metadata.doc_type || "";
-	const branch = metadata.branch || "";
-	const pubYear = metadata.pub_year || "";
-	const pageCount = metadata.page_count || "";
+	const docType = firstPassage.doc_type || "";
+	const branch = firstPassage.branch || "";
+	const pubYear = firstPassage.pub_year || "";
+	const pageCount = firstPassage.page_count || "";
 	const iaIdentifier = firstPassage.ia_identifier || "";
 	const iaUrl = firstPassage.ia_url || "";
 	const docIdShort =
 		docId.length > 16 ? `${docId.slice(0, 8)}…${docId.slice(-8)}` : docId;
 	const collection = firstPassage.collection || "army";
+	const passageLabel = isDocScoped
+		? `Viewing all ${passages.length} passage${passages.length !== 1 ? "s" : ""} in this document`
+		: `${passages.length} relevant passage${passages.length !== 1 ? "s" : ""}`;
 
 	let html = `
     <div class="document-header">
-      <div class="document-title"><a href="${escapeHtml(iaUrl || iaIdentifier ? `https://archive.org/details/${iaIdentifier}` : "")}" class="doc-title-link" target="_blank">${escapeHtml(title)} (${pubYear})</a> [${passages.length} relevant passage${passages.length !== 1 ? "s" : ""}]</div>
-      <div class="document-summary">${docType} · ${branch} · ${pubYear} · ${pageCount} pages · <span class="doc-id-display" title="Full doc_id: ${escapeHtml(docId)}">ID: ${escapeHtml(docIdShort)}</span>
-        <button class="download-pdf-btn" data-doc-id="${escapeHtml(docId)}" data-doc-title="${escapeHtml(title)}" style="margin-left:8px;">💰 Download PDF — $0.10</button>
+      <div class="document-title"><a href="${escapeHtml(iaUrl || iaIdentifier ? `https://archive.org/details/${iaIdentifier}` : "")}" class="doc-title-link" target="_blank">${escapeHtml(title)}${pubYear ? ` (${pubYear})` : ""}</a> [${passageLabel}]</div>
+      <div class="document-summary">${docType}${docType && branch ? " · " : ""}${branch}${pubYear ? ` · ${pubYear}` : ""}${pageCount ? ` · ${pageCount} pages` : ""} · <span class="doc-id-display" title="Full doc_id: ${escapeHtml(docId)}">ID: ${escapeHtml(docIdShort)}</span>
       </div>
     </div>
   `;
 
 	passages.forEach((passage, passageIndex) => {
 		const chunkIndex =
-			passage.chunk_index !== undefined ? passage.chunk_index : passageIndex;
+			passage.chunk_index !== undefined
+				? passage.chunk_index
+				: passageIndex;
 		const page = passage.page || 1;
-		const score = passage.score != null ? (passage.score * 100).toFixed(1) : "";
+		const score =
+			passage.score != null ? (passage.score * 100).toFixed(1) : "";
 		const excerpt = passage.text || "";
 		const chunkId = passage.chunk_id || "";
 		const iaDeepLink = iaIdentifier
@@ -96,7 +123,7 @@ export function buildDocGroupHtml(docId, passages) {
         <div class="passage-links">
           ${iaDeepLink ? `<a href="${escapeHtml(iaDeepLink)}" class="passage-link" target="_blank">View on page ${page} →</a>` : ""}
           ${iaUrl ? `<a href="${escapeHtml(iaUrl)}" class="passage-link" target="_blank">📄 View full document →</a>` : ""}
-          <span class="zk-status-badge" id="zk-status-${escapeHtml(chunkId)}" data-chunk-id="${escapeHtml(chunkId)}" data-doc-id="${escapeHtml(docId)}" data-collection="${escapeHtml(collection)}">🔗 Not verified</span>
+          <span class="zk-status-badge" id="zk-status-${escapeHtml(chunkId)}" data-chunk-id="${escapeHtml(chunkId)}" data-doc-id="${escapeHtml(docId)}" data-collection="${escapeHtml(collection)}">🔗 Generate Proof</span>
           <a class="zk-download-btn passage-link" data-chunk-id="${escapeHtml(chunkId)}" href="#">💾 Download Proof</a>
         </div>
         <div class="nav-buttons">
@@ -161,7 +188,7 @@ export function buildPassageCard(chunk, _zkProof) {
       <button class="chunk-nav-btn provenance" data-action="prev-chunk-provenance">← Prev + Provenance</button>
       <button class="chunk-nav-btn provenance" data-action="next-chunk-provenance">Next + Provenance →</button>
     </div>
-    ${chunk.doc_id ? `<div style="margin-top:8px;"><button class="download-pdf-btn" data-doc-id="${escapeHtml(chunk.doc_id)}" data-doc-title="${escapeHtml(chunk.title || "")}">💰 Download PDF — $0.10</button></div>` : ""}
+    ${chunk.doc_id ? `<div style="margin-top:8px;"></div>` : ""}
   `;
 
 	return div;
@@ -269,11 +296,13 @@ export function buildResultsModalHtml(chunkId, zkProof) {
 	const cached = zkProof;
 
 	const txHash = cached?.tx_hash || "";
-	const txExplorerLink = cached?.tx_explorer_url
-		? `<a href="${escapeHtml(cached.tx_explorer_url)}" target="_blank" style="color:#64b5f6; word-break:break-all;">${escapeHtml(cached.tx_explorer_url)}</a>`
+	const safeTxUrl = safeUrl(cached?.tx_explorer_url);
+	const txExplorerLink = safeTxUrl
+		? `<a href="${safeTxUrl}" target="_blank" style="color:#64b5f6; word-break:break-all;">${escapeHtml(cached.tx_explorer_url)}</a>`
 		: "";
-	const blockExplorerLink = cached?.block_explorer_url
-		? `<a href="${escapeHtml(cached.block_explorer_url)}" target="_blank" style="color:#64b5f6; word-break:break-all;">${escapeHtml(cached.block_explorer_url)}</a>`
+	const safeBlockUrl = safeUrl(cached?.block_explorer_url);
+	const blockExplorerLink = safeBlockUrl
+		? `<a href="${safeBlockUrl}" target="_blank" style="color:#64b5f6; word-break:break-all;">${escapeHtml(cached.block_explorer_url)}</a>`
 		: "";
 	const pi = cached?.public_inputs || {};
 	const hasProof = cached?.proof_hex;
@@ -289,7 +318,9 @@ export function buildResultsModalHtml(chunkId, zkProof) {
 			if (r.long) {
 				const full = r.long;
 				const truncated =
-					full.length > 20 ? `${full.slice(0, 8)}…${full.slice(-8)}` : full;
+					full.length > 20
+						? `${full.slice(0, 8)}…${full.slice(-8)}`
+						: full;
 				publicInputsHtml += `<tr>
           <td style="padding:4px 8px; color:#888;">${escapeHtml(r.field)}</td>
           <td style="padding:4px 8px; color:#aaa;">${escapeHtml(r.label)}${hint}</td>

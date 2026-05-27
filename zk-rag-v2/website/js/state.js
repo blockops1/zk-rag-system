@@ -25,55 +25,99 @@ export const PAGE_SIZE = 10;
 // ─── Module-level state (in-memory) ─────────────────────────────────────────
 
 let _state = {
-  allResults: [],
-  loadedDocCount: 0,
-  lastSearchWasProvenance: false,
-  zkCache: {},
-  searchState: 'IDLE',   // 'IDLE' | 'SEARCHING' | 'RESULTS_LOADING' | 'RESULTS_READY'
+	allResults: [],
+	loadedDocCount: 0,
+	lastSearchWasProvenance: false,
+	zkCache: {},
+	searchState: "IDLE", // 'IDLE' | 'SEARCHING' | 'RESULTS_LOADING' | 'RESULTS_READY'
+	_activeDocId: null, // doc_id when in document-scoped search mode; null for general search
+	_searchScope: "CORPUS", // 'CORPUS' | 'COLLECTION' | 'DOCUMENT'
 };
 
 // ─── Getters / Setters ────────────────────────────────────────────────────────
 
 export function getState() {
-  return { ..._state };
+	return { ..._state };
 }
 
 export function setState(newState) {
-  _state = { ..._state, ...newState };
+	_state = { ..._state, ...newState };
 }
 
 export function resetState() {
-  _state = {
-    allResults: [],
-    loadedDocCount: 0,
-    lastSearchWasProvenance: false,
-    zkCache: {},
-    searchState: 'IDLE',
-  };
+	_state = {
+		allResults: [],
+		loadedDocCount: 0,
+		lastSearchWasProvenance: false,
+		zkCache: {},
+		searchState: "IDLE",
+		_activeDocId: null,
+		_searchScope: "CORPUS",
+	};
+}
+
+// ─── Search scope helpers ───────────────────────────────────────────────────────
+
+/**
+ * Returns a human-readable label for the current search scope.
+ * When lastSearchWasProvenance is true, appends "— with Provenance" to the label.
+ * @returns {{ icon: string, label: string }}
+ */
+export function getSearchScopeLabel() {
+	const provenanceSuffix = _state.lastSearchWasProvenance
+		? " — with Provenance"
+		: "";
+	switch (_state._searchScope) {
+		case "DOCUMENT":
+			return {
+				icon: "📄",
+				label: `Searching within document${provenanceSuffix}`,
+			};
+		case "COLLECTION":
+			return {
+				icon: "📁",
+				label: `Searching collection: ${_state._activeCollection || "—"}${provenanceSuffix}`,
+			};
+		default:
+			return {
+				icon: "🔎",
+				label: `Searching corpus${provenanceSuffix}`,
+			};
+	}
 }
 
 // ─── ZK Cache ────────────────────────────────────────────────────────────────
 
 /** Get a cached ZK proof. Returns undefined if not in cache. */
 export function getZkCache(chunkId) {
-  return _state.zkCache[chunkId];
+	return _state.zkCache[chunkId];
 }
 
 /** Store a ZK proof in the in-memory cache. */
 export function setZkCache(chunkId, proof) {
-  _state.zkCache[chunkId] = proof;
+	_state.zkCache[chunkId] = proof;
 }
 
-/** Seed the ZK cache from an array of search results (each may have a .zk_proof). */
+/**
+ * Seed the ZK cache from an array of search results (each may have a .zk_proof).
+ * zk_proof may contain kurier_job_id (for provenance searches where auto-submit succeeded).
+ */
 export function seedZkCacheFromResults(results) {
-  results.forEach(result => {
-    if (result.zk_proof) {
-      _state.zkCache[result.chunk_id] = {
-        ...result.zk_proof,
-        evm_block_number: result.evm_block_number,
-      };
-    }
-  });
+	results.forEach((result) => {
+		if (result.zk_proof) {
+			const key = result.chunk_id || result.id;
+			console.log(
+				"[seedZkCache] storing cache key:",
+				key,
+				"zk_proof keys:",
+				Object.keys(result.zk_proof),
+			);
+			_state.zkCache[key] = {
+				...result.zk_proof,
+				evm_block_number: result.evm_block_number,
+			};
+		}
+	});
 }
 
 // ─── Pagination helpers ───────────────────────────────────────────────────────
@@ -83,13 +127,13 @@ export function seedZkCacheFromResults(results) {
  * @returns Map<docId, Array<chunk>>
  */
 export function groupByDocId(results) {
-  const groups = new Map();
-  results.forEach(result => {
-    const docId = result.doc_id || '';
-    if (!groups.has(docId)) groups.set(docId, []);
-    groups.get(docId).push(result);
-  });
-  return groups;
+	const groups = new Map();
+	results.forEach((result) => {
+		const docId = result.doc_id || "";
+		if (!groups.has(docId)) groups.set(docId, []);
+		groups.get(docId).push(result);
+	});
+	return groups;
 }
 
 /**
@@ -97,104 +141,107 @@ export function groupByDocId(results) {
  * Returns a new loadedDocCount value (does not mutate state).
  */
 export function computeLoadedDocCount(docGroups) {
-  let count = 0;
-  let visiblePassages = 0;
-  for (const [, passages] of docGroups) {
-    if (visiblePassages >= INITIAL_SHOW) break;
-    count++;
-    visiblePassages += passages.length;
-  }
-  return count;
+	let count = 0;
+	let visiblePassages = 0;
+	for (const [, passages] of docGroups) {
+		if (visiblePassages >= INITIAL_SHOW) break;
+		count++;
+		visiblePassages += passages.length;
+	}
+	return count;
 }
 
 // ─── localStorage persistence ─────────────────────────────────────────────────
 
-const LS_SEARCHES = 'zkrag_searches';
-const LS_CURRENT = 'zkrag_current_search';
-const LS_PROOFS = 'zkrag_proofs';
-const LS_VERIFICATION = 'zkrag_verification_results';
+const LS_SEARCHES = "zkrag_searches";
+const LS_CURRENT = "zkrag_current_search";
+const LS_PROOFS = "zkrag_proofs";
+const LS_VERIFICATION = "zkrag_verification_results";
 
 /** Record a search in history (last 5). */
 export function recordSearch(query, wasProvenance) {
-  try {
-    const raw = localStorage.getItem(LS_SEARCHES);
-    const searches = raw ? JSON.parse(raw) : [];
-    searches.unshift({ query, wasProvenance, timestamp: Date.now() });
-    const trimmed = searches.slice(0, 5);
-    localStorage.setItem(LS_SEARCHES, JSON.stringify(trimmed));
-  } catch {
-    // localStorage unavailable (private browsing, quota exceeded) — ignore
-  }
+	try {
+		const raw = localStorage.getItem(LS_SEARCHES);
+		const searches = raw ? JSON.parse(raw) : [];
+		searches.unshift({ query, wasProvenance, timestamp: Date.now() });
+		const trimmed = searches.slice(0, 5);
+		localStorage.setItem(LS_SEARCHES, JSON.stringify(trimmed));
+	} catch {
+		// localStorage unavailable (private browsing, quota exceeded) — ignore
+	}
 }
 
 /** Load recent searches from localStorage. Returns Array<{query, wasProvenance, timestamp}> */
 export function loadRecentSearches() {
-  try {
-    const raw = localStorage.getItem(LS_SEARCHES);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+	try {
+		const raw = localStorage.getItem(LS_SEARCHES);
+		return raw ? JSON.parse(raw) : [];
+	} catch {
+		return [];
+	}
 }
 
 /** Persist current search state to localStorage. */
 export function saveCurrentSearch(query, wasProvenance) {
-  try {
-    localStorage.setItem(LS_CURRENT, JSON.stringify({ query, wasProvenance }));
-  } catch {}
+	try {
+		localStorage.setItem(
+			LS_CURRENT,
+			JSON.stringify({ query, wasProvenance }),
+		);
+	} catch {}
 }
 
 /** Load and clear current search state from localStorage. */
 export function loadCurrentSearch() {
-  try {
-    const raw = localStorage.getItem(LS_CURRENT);
-    localStorage.removeItem(LS_CURRENT);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+	try {
+		const raw = localStorage.getItem(LS_CURRENT);
+		localStorage.removeItem(LS_CURRENT);
+		return raw ? JSON.parse(raw) : null;
+	} catch {
+		return null;
+	}
 }
 
 /** Cache a proof to localStorage (for persistence across page refreshes).
  * Uses deep merge: existing fields are preserved, new/kurier fields overwrite.
  */
 export function cacheProofLocally(chunkId, proof) {
-  try {
-    const raw = localStorage.getItem(LS_PROOFS);
-    const existing = raw ? JSON.parse(raw) : {};
-    const current = existing[chunkId] || {};
-    // Deep merge: spread current first, then overlay proof fields
-    existing[chunkId] = { ...current, ...proof };
-    localStorage.setItem(LS_PROOFS, JSON.stringify(existing));
-  } catch {}
+	try {
+		const raw = localStorage.getItem(LS_PROOFS);
+		const existing = raw ? JSON.parse(raw) : {};
+		const current = existing[chunkId] || {};
+		// Deep merge: spread current first, then overlay proof fields
+		existing[chunkId] = { ...current, ...proof };
+		localStorage.setItem(LS_PROOFS, JSON.stringify(existing));
+	} catch {}
 }
 
 /** Load the full local proof cache. Returns Object<chunkId, proof> */
 export function loadProofCache() {
-  try {
-    const raw = localStorage.getItem(LS_PROOFS);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+	try {
+		const raw = localStorage.getItem(LS_PROOFS);
+		return raw ? JSON.parse(raw) : {};
+	} catch {
+		return {};
+	}
 }
 
 /** Cache a verification result to localStorage. */
 export function cacheVerificationResult(chunkId, result) {
-  try {
-    const raw = localStorage.getItem(LS_VERIFICATION);
-    const cache = raw ? JSON.parse(raw) : {};
-    cache[chunkId] = result;
-    localStorage.setItem(LS_VERIFICATION, JSON.stringify(cache));
-  } catch {}
+	try {
+		const raw = localStorage.getItem(LS_VERIFICATION);
+		const cache = raw ? JSON.parse(raw) : {};
+		cache[chunkId] = result;
+		localStorage.setItem(LS_VERIFICATION, JSON.stringify(cache));
+	} catch {}
 }
 
 /** Load the full local verification cache. */
 export function loadVerificationCache() {
-  try {
-    const raw = localStorage.getItem(LS_VERIFICATION);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+	try {
+		const raw = localStorage.getItem(LS_VERIFICATION);
+		return raw ? JSON.parse(raw) : {};
+	} catch {
+		return {};
+	}
 }

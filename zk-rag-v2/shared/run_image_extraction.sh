@@ -18,9 +18,9 @@ echo "========================================" >> "$LOG_FILE"
 
 # Run extraction and capture output
 OUTPUT=$(cd "$RAG_ROOT" && venv/bin/python3 scripts/extract_images.py \
-    --registry-path $DATA_DIR/registry.json \
-    --uploads-dir $DATA_DIR/source_pdfs \
-    --images-out-dir $DATA_DIR/images \
+    --registry-path ../data/registry.json \
+    --uploads-dir ../data/sourcePDF \
+    --images-out-dir ../data/images \
     2>&1) || true
 
 # Log full output
