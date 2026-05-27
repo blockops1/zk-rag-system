@@ -41,7 +41,7 @@ from pathlib import Path
 
 MERKLE_TREES_DIR = Path("../data/merkleTrees")
 REGISTRY_PATH    = Path("../data/registry.json")
-LOG_DIR          = Path("/data/logs")
+LOG_DIR          = Path("../data/logs")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

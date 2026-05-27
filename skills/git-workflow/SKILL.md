@@ -372,7 +372,7 @@ This fails because: `git stash push` stages changes to the stash but the working
 **Prevention:** Always commit before switching branches. If you must stash temporarily, use `git stash` (without push) after confirming `git status` is clean, or use `git restore <path>` to explicitly restore from a specific ref.
 
 ## RAG System Repo
-- URL: git@github.com:blockops1/document_rag_system.git
+- URL: git@github.com:blockops1/zk-rag-system.git
 - Branch: main (always pull before editing)
 - Working copy on server: /tmp/document_rag_system/ (synced from live scripts in <VENV>scripts/)
 - Live scripts: <VENV>scripts/

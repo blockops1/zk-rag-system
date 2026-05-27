@@ -10,7 +10,7 @@ from pathlib import Path
 
 REGISTRY_PATH = Path("../data/registry.json")
 MERKLE_DIR    = Path("../data/merkleTrees")
-LOG_DIR       = Path("/data/logs")
+LOG_DIR       = Path("../data/logs")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 today = "20260424"

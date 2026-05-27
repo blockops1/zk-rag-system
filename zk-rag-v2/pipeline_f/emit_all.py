@@ -20,7 +20,7 @@ Registry emit fields (per doc):
         chain_id:   2651420 (testnet) | 26514 (mainnet)
 
 Logging:
-    Always written to /data/logs/emit_all_debug_YYYYMMDD.log (every invocation).
+    Always written to ../data/logs/emit_all_debug_YYYYMMDD.log (every invocation).
     --verify: Also writes on-chain verification results to emit_all_verify_YYYYMMDD.log
 
 Env vars required (for non-dry-run):
