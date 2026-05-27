@@ -1,6 +1,6 @@
 # ZK-RAG — Zero-Knowledge Retrieval-Augmented Generation
 
-A production-grade RAG system with cryptographic ZK proofs of provenance, built on Horizen EVM (Zendoo) with plonky2 zero-knowledge circuits.
+A production-grade RAG system with cryptographic ZK proofs of provenance, built on Horizen EVM with plonky2 zero-knowledge circuits.
 
 > **This is the public scaffold.** It contains all pipeline scripts, contracts, circuits, and frontend — everything needed to run your own ZK-RAG system. The `data/` directory is empty; point the pipelines at your own document corpus.
 

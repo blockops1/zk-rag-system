@@ -510,7 +510,7 @@ def scaffold(output_root: Path, sample_size: int, dry_run: bool, check_only: boo
     readme_content = """# ZK-RAG — Zero-Knowledge Retrieval-Augmented Generation
 
 A production-grade RAG system with on-chain ZK proof of provenance for military documents.
-Built on Horizen EVM (Zendoo) with plonky2 zero-knowledge circuits.
+Built on Horizen EVM with plonky2 zero-knowledge circuits.
 
 **This is a scaffolded public version.** See [docs/README.md](zk-rag-v2/docs/README.md)
 for the full operator guide.
