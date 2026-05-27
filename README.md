@@ -2,13 +2,13 @@
 
 A production-grade RAG system with cryptographic ZK proofs of provenance, built on Horizen EVM (Zendoo) with plonky2 zero-knowledge circuits.
 
-> **This is the public scaffold.** It contains all pipeline scripts, contracts, circuits, and frontend — everything needed to run your own ZK-RAG system. Sample data directories are included but empty; point the pipelines at your own document corpus.
+> **This is the public scaffold.** It contains all pipeline scripts, contracts, circuits, and frontend — everything needed to run your own ZK-RAG system. The `data/` directory is empty; point the pipelines at your own document corpus.
 
 ---
 
 ## What Does It Do?
 
-1. **Ingest** PDFs through a processing pipeline (text extraction, OCR, vision descriptions, chunking)
+1. **Ingest** PDFs through a processing pipeline (text extraction, OCR, chunking)
 2. **Embed** document chunks as vectors and store them in Qdrant
 3. **Prove** every chunk with a ZK proof that cryptographically verifies it belongs to a document whose Merkle root is committed on-chain
 4. **Query** — semantic search returns results with a verifiable ZK proof of provenance
@@ -20,27 +20,26 @@ The result: anyone can verify that a search result actually came from the commit
 ## Architecture
 
 ```
-PDF ──► A (fitz) ──► B (docling OCR) ──► C (SmolVLM2 vision) ──► D (chunk + embed + Qdrant)
-                                                                              │
-                                                                              ▼
-                                                               E (Poseidon Merkle tree)
-                                                                              │
-                                                                              ▼
-                                                          F (commit root on Horizen EVM)
-                                                                              │
-                                                                              ▼
-                                                     G (Qdrant payload + ZK metadata)
-                                                                              │
-                                                                              ▼
-                                                    Query API + ZK proof generation
+PDF ──► A (fitz) ──► B (docling OCR) ──► D (chunk + embed + Qdrant)
+                                                    │
+                                                    ▼
+                                      E (Poseidon Merkle tree)
+                                                    │
+                                                    ▼
+                                      F (commit root on Horizen EVM)
+                                                    │
+                                                    ▼
+                                        G (Qdrant payload + ZK metadata)
+                                                    │
+                                                    ▼
+                                       Query API + ZK proof generation
 ```
 
 | Stage | What happens |
-|--------|--------------|
+|-------|-------------|
 | **A** | Extract raw text from each PDF page via PyMuPDF (fitz) |
 | **B** | Run docling OCR on low-density pages to recover text from scans |
-| **C** | Generate vision captions for figure/photo pages via SmolVLM2 |
-| **D** | Split into overlapping chunks, embed with Qwen3-Embedding-0.6B, upsert to Qdrant |
+| **D** | Split into overlapping chunks, embed with NomicEmbed, upsert to Qdrant |
 | **E** | Build a Poseidon Merkle tree over all chunks (plonky2) |
 | **F** | Commit the Merkle root to the Horizen EVM MerkleRootRegistry contract |
 | **G** | Store Merkle proof path + ZK circuit metadata in Qdrant alongside each chunk |
@@ -63,12 +62,12 @@ Both are publicly verifiable on the [Horizen block explorer](https://horizen.cal
 ### 1. Clone and set up the environment
 
 ```bash
-git clone https://github.com/blockops1/document-rag-with-zk.git
-cd document-rag-with-zk
+git clone https://github.com/blockops1/zk-rag-system.git
+cd zk-rag-system
 
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt          # if a requirements.txt exists
+pip install -r requirements.txt          # if a root requirements.txt exists
 # or install key deps directly:
 pip install fastapi uvicorn qdrant-client python-dotenv httpx
 ```
@@ -89,7 +88,7 @@ cp zk-rag-v2/.env.example zk-rag-v2/.env
 ```bash
 cd zk-rag-v2/zk-circuit
 cargo build --release
-# Pre-built circuit binaries (depth 5–12) are included in the repo
+# Pre-built circuit binaries (depth 5–12) are included: circuit_depth_5.bin, etc.
 ```
 
 ### 4. Start Qdrant
@@ -115,30 +114,18 @@ python3 shared/api_server.py
 # API at http://127.0.0.1:8100/
 ```
 
-### 6. Start the embedding service (separate terminal)
-
-```bash
-cd zk-rag-v2
-source venv/bin/activate
-export PYTHONPATH=.
-python3 shared/embedding_service.py
-```
-
 ---
 
 ## Running the Pipelines
 
-After setup, process your own document corpus:
+Process your document corpus through the pipeline stages in order:
 
 ```bash
 # Pipeline A — extract text from PDFs
 ./zk-rag-v2/pipeline_a/run_pipeline_a.sh
 
-# Pipeline B — OCR on low-density pages
+# Pipeline B — OCR on low-density pages (docling)
 ./zk-rag-v2/pipeline_b/run_pipeline_b.sh
-
-# Pipeline C — vision model captions for figure pages
-./zk-rag-v2/pipeline_c/run_pipeline_c.sh
 
 # Pipeline D — chunk, embed, upsert to Qdrant
 ./zk-rag-v2/pipeline_d/run_pipeline_d.sh
@@ -151,8 +138,11 @@ source zk-rag-v2/.env
 cd zk-rag-v2/pipeline_f
 python3 emit_all.py --batch --limit 200
 
-# Pipeline G — sync ZK metadata to Qdrant
-# (handled automatically by emit_all.py after emission)
+# Pipeline G — sync ZK metadata to Qdrant (handled automatically after emission)
+
+# Pipeline J — cleanup: remove orphaned artifacts with no registry entry
+./zk-rag-v2/pipeline_j/pipeline_j_cleanup.py --dry-run  # review first
+./zk-rag-v2/pipeline_j/pipeline_j_cleanup.py            # execute
 ```
 
 ---
@@ -163,7 +153,7 @@ python3 emit_all.py --batch --limit 200
 # Semantic search
 curl -X POST http://127.0.0.1:8100/api/query \
   -H "Content-Type: application/json" \
-  -d '{"query": "enemy prisoner of war handling procedures", "top_k": 5}'
+  -d '{"query": "your search query", "top_k": 5}'
 
 # List available collections
 curl http://127.0.0.1:8100/api/collections
@@ -186,43 +176,57 @@ Interactive docs at [http://127.0.0.1:8100/docs](http://127.0.0.1:8100/docs)
 ## Project Structure
 
 ```
-zk-rag-v2/
-├── pipeline_a/          ← PDF text extraction (PyMuPDF/fitz)
-├── pipeline_b/          ← OCR (docling)
-├── pipeline_c/          ← Vision captions (SmolVLM2)
-├── pipeline_d/          ← Chunking + embedding + Qdrant upsert
-├── pipeline_e/          ← Poseidon Merkle tree builder (Rust/plonky2)
-├── pipeline_f/          ← On-chain Merkle root emission (Foundry)
-├── pipeline_g/          ← Qdrant upsert with ZK metadata
-├── shared/
-│   ├── api_server.py    ← FastAPI query + provenance server
-│   ├── embedding_service.py  ← Qwen3 embedding service
-│   └── provenance.py    ← ZK proof generation + verification
-├── zk-circuit/          ← plonky2 ZK circuits (Rust)
-│   ├── prove-bin/       ← Binary for generating ZK proofs
-│   └── verify-zk-proof/ ← Binary for verifying proofs on-chain
-├── website/             ← Frontend (static HTML/JS)
-└── docs/
-    ├── README.md        ← This file
-    ├── admin.md         ← Full operator guide
-    └── dependency-map.md ← System dependencies
+zk-rag-system/               ← GitHub repo root
+├── README.md                 ← This file
+├── tools/                    ← Build and audit tools
+│   ├── scaffold_zkrag.py     ← Repo scaffolding generator
+│   └── scan_leaks.py         ← Credential/path leak scanner
+├── skills/                   ← Operator reference (ZK-RAG, Git, Linux Admin, etc.)
+└── zk-rag-v2/               ← Main project
+    ├── pipeline_a/           ← PDF text extraction (PyMuPDF/fitz)
+    ├── pipeline_b/           ← OCR (docling)
+    ├── pipeline_d/            ← Chunking + embedding + Qdrant upsert
+    ├── pipeline_e/            ← Poseidon Merkle tree builder (Rust/plonky2)
+    ├── pipeline_f/            ← On-chain Merkle root emission (Foundry)
+    ├── pipeline_g/            ← Qdrant upsert with ZK metadata
+    ├── pipeline_j/            ← Orphaned artifact cleanup
+    ├── shared/
+    │   ├── api_server.py      ← FastAPI query + provenance server
+    │   └── provenance.py      ← ZK proof generation + verification
+    ├── zk-circuit/           ← plonky2 ZK circuits (Rust)
+    │   ├── circuit/           ← Circuit library crate
+    │   ├── prove-bin/         ← Binary for generating ZK proofs
+    │   ├── verify-zk-proof/   ← Binary for verifying proofs on-chain
+    │   └── circuit_depth_*.bin  ← Pre-built circuit binaries (depth 5–12)
+    ├── website/               ← Frontend (static HTML/JS)
+    └── docs/
+        ├── admin.md          ← Full operator guide
+        └── dependency-map.md ← System dependencies
 
-data/                    ← Document corpus and runtime data (gitignored)
-├── chunks/              ← Per-document chunk JSONL files
-├── embeddings/          ← Per-document numpy embedding files
-├── merkle_trees/        ← Per-document Merkle tree JSON files
-└── zk_proofs/           ← Generated ZK proofs
+data/                         ← Document corpus and runtime data (gitignored)
+├── registry.json             ← Document manifest
+├── sourcePDF/                ← Source PDFs
+├── chunks/                   ← Per-document chunk JSONL files
+├── embeddings/               ← Per-document numpy embedding files
+├── merkleTrees/              ← Per-document Merkle tree JSON files
+├── images/                   ← Extracted page images
+├── extracted/                ← PDF text extraction output
+├── zk_proofs/               ← Generated ZK proofs
+├── qdrant/                   ← Qdrant storage
+├── logs/                     ← Pipeline and API logs
+├── failed_pdfs/              ← Failed extraction tracking
+├── archive/                  ← Archived docs
+└── extraction_queue.json     ← Pipeline B work queue
 ```
 
 ---
 
 ## Customizing for Your Data
 
-1. **Add your PDFs** to a directory and point Pipeline A at it
-2. **Update the registry** — add entries for your documents (see `data/` for the registry format)
-3. **Set `DEPLOYER_KEY`** in `.env` with a wallet funded for the target network
-4. **Run pipelines A → B → C → D → E → F in order**
-5. **Deploy the contract** using the Foundry scripts in `pipeline_f/script/`
+1. **Add your PDFs** to `data/sourcePDF/` and register them in `data/registry.json`
+2. **Set `DEPLOYER_KEY`** in `.env` with a wallet funded for the target network
+3. **Run pipelines A → B → D → E → F in order** — each stage reads from the previous stage's output
+4. **Contract is already deployed** — the MerkleRootRegistry addresses above are live; no deployment needed
 
 ---
 
@@ -231,12 +235,12 @@ data/                    ← Document corpus and runtime data (gitignored)
 | File | Purpose |
 |------|---------|
 | `zk-rag-v2/shared/api_server.py` | FastAPI server — query + provenance endpoints |
-| `zk-rag-v2/shared/embedding_service.py` | HTTP embedding service wrapping Qwen3 |
-| `zk-rag-v2/zk-circuit/src/circuits/zk_rag.rs` | ZK circuit design (plonky2) |
+| `zk-rag-v2/shared/provenance.py` | ZK proof generation + zkVerify submission |
+| `zk-rag-v2/zk-circuit/prove-bin/` | Binary ZK proof generator (Rust) |
+| `zk-rag-v2/zk-circuit/verify-zk-proof/` | On-chain proof verifier binary (Rust) |
 | `zk-rag-v2/pipeline_f/contracts/MerkleRootRegistryV2.sol` | On-chain verifier contract |
 | `zk-rag-v2/docs/admin.md` | Full operator guide |
 | `zk-rag-v2/docs/dependency-map.md` | System dependency guide |
-| `zk-rag-v2/PROJ.md` | Project status and history |
 
 ---
 
@@ -250,4 +254,3 @@ data/                    ← Document corpus and runtime data (gitignored)
 | `CONTRACT_ADDRESS` | MerkleRootRegistry contract address |
 | `ACTIVE_NETWORK` | `testnet` or `mainnet` |
 | `ZK_PROOF_PARALLELISM` | Number of parallel ZK proof workers (default: 2) |
-
