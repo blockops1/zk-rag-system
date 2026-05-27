@@ -486,14 +486,14 @@ with open(REGISTRY_PATH, "w") as f:
 `<DATA>` has its own git repo. Always commit before modifying the registry:
 
 ```bash
-cd /data/military-documents
+cd <DATA>
 git add registry.json
 git commit -m "Checkpoint: description of change"
 ```
 
 If something goes wrong:
-```bash
-cd /data/military-documents
+```
+cd <DATA>
 git log --oneline           # find the good commit
 git checkout <commit> -- registry.json  # restore
 ```
@@ -1644,7 +1644,7 @@ cp <DATA>registry.json <DATA>registry.json.bak.$(date +%Y%m%d-%H%M%S)
 
 The registry lives at `<DATA>registry.json` (NOT in the git project). It has its own git repo at `<DATA>.git` — also commit before destructive changes:
 ```bash
-cd /data/military-documents && git add registry.json && git commit -m "checkpoint: description"
+cd <DATA> && git add registry.json && git commit -m "checkpoint: description"
 ```
 
 ---
@@ -2018,7 +2018,7 @@ rules:
     severity: error
     pattern: "few characters"
 ```
-Run: `desloppify scan /data/military-documents`
+Run: `desloppify scan <DATA>`
 
 ---
 

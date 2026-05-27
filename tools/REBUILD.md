@@ -4,8 +4,8 @@
 Rebuild the public GitHub repo (`git@github.com:blockops1/zk-rag-system.git`) so a third party can clone it on a different machine and build/operate a completely self-sufficient ZK-RAG system from scratch.
 
 ## Source & Destination
-- **Private repo:** `<PRIVATE_REPO>` (e.g. `/home/blockops/zk-rag-v2/`)
-- **Public repo:** `<PUBLIC_REPO>` (e.g. `/home/blockops/zk-rag-public/`)
+- **Private repo:** `<PRIVATE_REPO>` (e.g. `/home/user/document-rag-with-zk/`)
+- **Public repo:** `<PUBLIC_REPO>` (e.g. `/home/user/zk-rag-system/`)
 - **Branch:** `main`
 - **Remote:** `git@github.com:blockops1/zk-rag-system.git`
 
@@ -64,15 +64,15 @@ Skills are operator reference documentation. They use placeholder tokens that an
 
 | Placeholder | Meaning |
 |---|---|
-| `<REPO>` | Git repository root (e.g. `/home/user/zk-rag-v2/`) |
-| `<DATA>` | Data directory root (e.g. `/data/military-documents/`) |
+| `<REPO>` | Git repository root (e.g. `/home/user/zk-rag-system/`) |
+| `<DATA>` | Data directory root (e.g. `/home/user/zk-rag-data/`) |
 | `<FOUNDRY_BIN>` | Foundry binaries path (e.g. `/home/user/.foundry/bin/`) |
-| `<VENV>` | Python venv root (e.g. `/home/user/rag/`) |
+| `<VENV>` | Python venv root (e.g. `/home/user/zk-rag-venv/`) |
 | `<DESLOP>` | Desloppify install dir (e.g. `/home/user/desloppify/`) |
-| `<HOME>` | User home directory (e.g. `/home/blockops/`) |
-| `<USER>` | OS username (e.g. `blockops`) |
-| `<SERVER_IP>` | Internal server IP (e.g. `10.120.60.102`) |
-| `<PUBLIC_HOST>` | Public DNS hostname (e.g. `militarymanuals.ai`) |
+| `<HOME>` | User home directory (e.g. `/home/user/`) |
+| `<USER>` | OS username (e.g. `username`) |
+| `<SERVER_IP>` | Internal server IP (e.g. `10.0.0.1`) |
+| `<PUBLIC_HOST>` | Public DNS hostname (e.g. `example.com`) |
 
 ---
 
@@ -99,8 +99,9 @@ Not applicable — sync already present in public repo.
 ### Step 2 — Rsync from private source ✓
 Already completed. `zk-rag-v2/` exists at `<PUBLIC_REPO>/zk-rag-v2/`.
 
-### Step 3 — Add missing required files
-Pending. Check if `pipeline_a/requirements.txt` and root `requirements.txt` exist.
+### Step 3 — Add missing required files ✓ DONE (2026-05-28)
+- Created `requirements.txt` with all pip-installable dependencies
+- Created `.env.example` with all environment variables
 
 ### Step 4 — Path replacement ✓ DONE (2026-05-28)
 
@@ -117,10 +118,17 @@ Pending. Check if `pipeline_a/requirements.txt` and root `requirements.txt` exis
 - `pipeline_d/chunk_document.py`: removed `VISION_BASE`, simplified source selection
 - `pipeline_g.py`: removed BM25 helpers, `pickle`/`re` imports, commented-out BM25 call block
 
+**Path fixes applied:**
+- `shared/_log.py`: `rag/logs` → `../data/logs`
+- `pipeline_a/harvest.sh`: `RAG_DIR="rag"` → `RAG_DIR="."`
+- `pipeline_a/ingest.sh`: `RAG_DIR="rag"` → `RAG_DIR="."`
+- `docs/admin.md`: full rewrite for public repo structure
+- `docs/README.md`: full rewrite for public repo structure
+
 **Verification:** `grep` confirms zero `<HOME>`, `<DATA>`, `source_pdfs`, `merkle_trees`, `extracted-vision`, `bm25_index` in any `.py` or `.sh` file in `zk-rag-v2/`.
 
-### Step 5 — Run leak scan
-Pending: `python3 tools/scan_leaks.py zk-rag-v2/ skills/`
+### Step 5 — Run leak scan ✓ DONE (2026-05-28)
+All leaks fixed. Skills and code clean.
 
 ### Step 6 — Commit and push
 ```
@@ -132,6 +140,41 @@ git push origin main
 
 ### Step 7 — Update this document
 Mark each step complete with timestamp.
+
+---
+
+## Path Mapping System
+
+### Code Files (`zk-rag-v2/`, `tools/`)
+
+Rule: Every path points somewhere inside the public repo or a directory that ships with it. No paths point outside the repo. Absolute paths become relative to the repo root.
+
+| Original | Replacement |
+|---|---|
+| `<PRIVATE_REPO>/` | `./` |
+| `/data/military-documents/` | `./data/` |
+| `source_pdfs` | `sourcePDF` |
+| `merkle_trees` | `merkleTrees` |
+| `<FOUNDRY_BIN>/` | `./foundry-bin/` |
+| `<VENV>/` | `./.venv/` |
+| `rag/logs` | `../data/logs` |
+| `RAG_DIR="rag"` | `RAG_DIR="."` |
+
+### Skill Files (`skills/`)
+
+Skills are operator reference documentation. They use placeholder tokens that an operator substitutes for their own system values.
+
+| Placeholder | Meaning |
+|---|---|
+| `<REPO>` | Git repository root (e.g. `/home/user/zk-rag-system/`) |
+| `<DATA>` | Data directory root (e.g. `/home/user/zk-rag-data/`) |
+| `<FOUNDRY_BIN>` | Foundry binaries path (e.g. `/home/user/.foundry/bin/`) |
+| `<VENV>` | Python venv root (e.g. `/home/user/zk-rag-venv/`) |
+| `<DESLOP>` | Desloppify install dir (e.g. `/home/user/desloppify/`) |
+| `<HOME>` | User home directory (e.g. `/home/user/`) |
+| `<USER>` | OS username (e.g. `username`) |
+| `<SERVER_IP>` | Internal server IP (e.g. `10.0.0.1`) |
+| `<PUBLIC_HOST>` | Public DNS hostname (e.g. `example.com`) |
 
 ---
 
