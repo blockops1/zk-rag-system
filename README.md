@@ -19,20 +19,18 @@ The result: anyone can verify that a search result actually came from the commit
 
 ## Architecture
 
-```
-PDF ──► A (fitz) ──► B (docling OCR) ──► D (chunk + embed + Qdrant)
-                                                    │
-                                                    ▼
-                                      E (Poseidon Merkle tree)
-                                                    │
-                                                    ▼
-                                      F (commit root on Horizen EVM)
-                                                    │
-                                                    ▼
-                                        G (Qdrant payload + ZK metadata)
-                                                    │
-                                                    ▼
-                                       Query API + ZK proof generation
+```mermaid
+flowchart TD
+    PDF["PDF"]
+    A["A: fitz — extract raw text"]
+    B["B: docling OCR — low-density pages"]
+    D["D: chunk + embed + Qdrant"]
+    E["E: Poseidon Merkle tree"]
+    F["F: commit root on Horizen EVM"]
+    G["G: Qdrant payload + ZK metadata"]
+    API["Query API + ZK proof generation"]
+
+    PDF --> A --> B --> D --> E --> F --> G --> API
 ```
 
 | Stage | What happens |
