@@ -46,11 +46,7 @@ except Exception as e:
     print(f"[api_server] FATAL: cannot import shared: {e}", flush=True, file=sys.stderr)
     raise
 
-# Verify x402_paid_download exists
-_x402_path = os.path.join(os.path.dirname(_this_file), "x402_paid_download.py")
-print(f"[api_server] x402_paid_download.py exists: {os.path.exists(_x402_path)}", flush=True)
-
-print("[api_server] Imports phase starting...", flush=True)
+print(f"[api_server] Imports phase starting...", flush=True)
 
 import hashlib
 import json
@@ -60,14 +56,6 @@ import os
 import time
 import asyncio
 import httpx
-print("[api_server] x402 import starting...", flush=True)
-from x402_paid_download import (
-    verify_and_stream,
-    PRICE_MICRO_USDC,
-    NETWORK_SPEC,
-    USDC_CONTRACT,
-)
-print("[api_server] x402 import OK", flush=True)
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, Header, Query
 from typing import Optional
@@ -122,9 +110,9 @@ async def lifespan(app: FastAPI):
     """Load embedding model on startup; close thread pool on shutdown."""
     global _http_client
     print("[api_server] [lifespan] Configuring httpx limits...", flush=True)
-    # Note: httpx client is kept for x402 paid download calls, not for embeddings
+    # Note: httpx client kept for general HTTP calls
     _http_client = httpx.AsyncClient(
-        base_url="http://127.0.0.1:8200",  # kept for x402 compatibility
+        base_url="http://127.0.0.1:8200",
         limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
         timeout=httpx.Timeout(60.0),
     )
@@ -2015,85 +2003,19 @@ async def poll_kurier_status(job_id: str):
     }
 
 
-# ─── X402 Paid Download Endpoints ─────────────────────────────────────────────
+# ─── Source PDF Download Endpoints ─────────────────────────────────────────────
+# X402 paid download removed — these endpoints are stubs that return 501.
 
 @app.get("/api/source/{doc_id}/info")
 async def get_source_info(doc_id: str):
-    """Return document metadata and price for paid PDF download."""
-    import json
-
-    registry_path = Path("../data/registry.json")
-    try:
-        with open(registry_path) as f:
-            registry = json.load(f)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load registry: {e}")
-
-    docs = registry.get("documents", [])
-    doc = next((d for d in docs if d.get("doc_id") == doc_id), None)
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
-
-    local_path = doc.get("local_path")
-    if not local_path or not Path(local_path).exists():
-        raise HTTPException(status_code=404, detail="Source PDF not found on server")
-
-    # Use the filename from the local_path as the download filename
-    filename = Path(local_path).name
-
-    return {
-        "doc_id": doc_id,
-        "title": doc.get("title", doc_id),
-        "branch": doc.get("branch", "unknown"),
-        "filename": filename,
-        "price_usd": f"{PRICE_MICRO_USDC / 1_000_000:.2f}",
-        "price_micro_usdc": PRICE_MICRO_USDC,
-        "asset": USDC_CONTRACT,
-        "network": NETWORK_SPEC,
-        "scheme": "exact",
-        "pay_to": os.environ.get("PAID_DOWNLOAD_RECEIVING_ADDRESS", ""),
-        "max_timeout_seconds": 300,
-    }
+    """Return document metadata. Stub — X402 paid download not available."""
+    raise HTTPException(status_code=501, detail="Paid download not available in this build")
 
 
 @app.get("/api/source/{doc_id}")
 async def get_source_pdf(doc_id: str, request: Request):
-    """Stream the source PDF for a document, requiring X402 payment proof.
-
-    Without a Payment-Signature header: returns 402 with PAYMENT-REQUIRED.
-    With a valid EIP-3009 PaymentPayload: streams the PDF file.
-    """
-    # Extract the base64-encoded PaymentPayload from the X402 header
-    payment_sig = request.headers.get("Payment-Signature")
-
-    # Build the resource URL as seen by the client
-    resource_url = f"{request.base_url}api/source/{doc_id}"
-
-    should_stream, status_code, response_headers, result = verify_and_stream(
-        doc_id, payment_sig, resource_url
-    )
-
-    if status_code == 402:
-        raise HTTPException(
-            status_code=402,
-            detail=result,
-            headers={k: v for k, v in response_headers.items()},
-        )
-
-    if not should_stream or status_code != 200:
-        raise HTTPException(status_code=status_code, detail=result)
-
-    # result is the local file path
-    file_path = result
-    filename = Path(file_path).name
-
-    from starlette.responses import FileResponse
-    return FileResponse(
-        path=file_path,
-        filename=filename,
-        media_type="application/pdf",
-        headers={k: v for k, v in response_headers.items()},
-    )
+    """Stream the source PDF. Stub — X402 paid download not available."""
+    raise HTTPException(status_code=501, detail="Paid download not available in this build")
 
 
 if __name__ == "__main__":
