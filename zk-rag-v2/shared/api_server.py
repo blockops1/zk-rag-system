@@ -15,27 +15,17 @@ print(f"[api_server] Python: {sys.executable}", flush=True)
 print(f"[api_server] CWD: {os.getcwd()}", flush=True)
 print(f"[api_server] sys.path[0]: {sys.path[0]}", flush=True)
 
-# Fix sys.path so imports work regardless of WorkingDirectory
-# __file__ = ./shared/api_server.py  (R730 layout)
-#          = /home/deruyter/rag/api_server.py              (VPS layout)
-# Detect which layout we're in and add the right parent to sys.path
+# Fix sys.path so imports work regardless of working directory
+# Detect whether api_server.py lives inside a `shared/` subdirectory or at
+# the repo root, then add the appropriate parent to sys.path so `import shared` resolves.
 _this_file = os.path.abspath(__file__)
 _this_dir = os.path.dirname(_this_file)
 if os.path.basename(_this_dir) == "shared":
-    # R730 layout: api_server.py is inside shared/ subdirectory
     _project_root = os.path.dirname(_this_dir)
     sys.path.insert(0, _project_root)
 else:
-    # VPS layout: api_server.py is directly in /home/deruyter/rag/
-    # shared/ module files live at the same level, not in a subdirectory
-    # Add parent (/home/deruyter/) so `shared` resolves via the symlink below
     _project_root = os.path.dirname(_this_dir)
     sys.path.insert(0, _project_root)
-    # On VPS, /home/deruyter/shared is a symlink to /home/deruyter/rag/
-    # so `import shared` resolves to /home/deruyter/shared/ → /home/deruyter/rag/
-    _shared_link = os.path.join(_project_root, "shared")
-    if not os.path.islink(_shared_link) and not os.path.isdir(_shared_link):
-        os.symlink(_this_dir, _shared_link)
 print(f"[api_server] Added project root to sys.path: {_project_root}", flush=True)
 
 # Validate that shared/ is importable
@@ -55,7 +45,7 @@ import logging.handlers
 import os
 import time
 import asyncio
-import httpx
+import httpx  # for httpx.HTTPError in exception handlers
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, Header, Query
 from typing import Optional
@@ -67,10 +57,6 @@ from pydantic import BaseModel, field_validator
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from qdrant_client.http.exceptions import ApiException
-
-# Embedding service client (connection-pooled)
-_EMBEDDING_SERVICE_URL = "http://127.0.0.1:8200"
-_http_client: httpx.AsyncClient | None = None
 
 
 # ── Embedding model (fastembed, loaded once at startup) ──────────────────────
@@ -108,14 +94,6 @@ def _load_embed_model():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load embedding model on startup; close thread pool on shutdown."""
-    global _http_client
-    print("[api_server] [lifespan] Configuring httpx limits...", flush=True)
-    # Note: httpx client kept for general HTTP calls
-    _http_client = httpx.AsyncClient(
-        base_url="http://127.0.0.1:8200",
-        limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
-        timeout=httpx.Timeout(60.0),
-    )
     print("[api_server] [lifespan] Loading embedding model...", flush=True)
     try:
         _load_embed_model()
@@ -124,8 +102,6 @@ async def lifespan(app: FastAPI):
         raise
     print("[api_server] [lifespan] Startup complete.", flush=True)
     yield
-    if _http_client:
-        await _http_client.aclose()
     _encode_executor.shutdown(wait=False)
     print("[api_server] Lifespan shutdown complete.", flush=True)
 
@@ -188,7 +164,7 @@ print("[api_server] FastAPI app created OK", flush=True)
 # CORS middleware - specific origins only (no wildcard with credentials)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://militarymanuals.ai"],
+    allow_origins=[os.environ.get("CORS_ORIGIN", "https://example.com")],
     allow_credentials=True,
     allow_methods=["*"],
 )

@@ -129,7 +129,7 @@ def process_single_page(work: PageWork, threads: int) -> dict:
             break
 
     prompt = (
-        "Describe this military document image briefly. "
+        "Describe this document image briefly. "
         "Identify the visual type (photograph, map, chart, diagram, figure, flowchart, organizational chart, etc.) "
         "and summarize the key content in 1-3 sentences."
     )

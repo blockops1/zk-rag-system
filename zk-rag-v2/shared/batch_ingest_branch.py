@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Branch-aware batch ingest for Military Docs RAG.
+Branch-aware batch ingest for ZK-RAG.
 Reads PDFs from ../data/sourcePDF/{branch}/,
 looks up metadata from unified-registry.json, and ingests into
 per-branch Qdrant collections (army, navy, marines, coastguard, joint, other).
@@ -597,7 +597,7 @@ def reindex_one(doc_id, branch, timeout=3600):
 
 # ── Main ──────────────────────────────────────────────────────────
 def main():
-    parser = argparse.ArgumentParser(description="Branch-aware military docs batch ingest")
+    parser = argparse.ArgumentParser(description="Branch-aware batch ingest")
     parser.add_argument("limit", nargs="?", default="all")
     parser.add_argument("--pass", dest="pass_num", type=int, default=1)
     parser.add_argument("--retry-failed", action="store_true",

@@ -355,7 +355,7 @@ git restore --source=HEAD path/to/file      # alternative (git 2.23+)
 `gh` is not installed on the R730 (Fred). If `gh auth status` shows "not logged in" and no token is found in `~/.hermes/.env`, fall back to:
 
 1. Push the branch: `git push -u origin HEAD`
-2. Provide the PR URL: `https://github.com/blockops1/document-rag-with-zk/pull/new/<branch>`
+2. Provide the PR URL: `https://github.com/blockops1/zk-rag-system/pull/new/<branch>`
 3. Mr. V pastes the body manually, or paste the PR description into Telegram for him to copy
 
 **Do not wait on auth setup** — the branch is pushed, the code is reviewable, the PR URL is ready.
