@@ -73,7 +73,13 @@ location = /health {
 ### /api/docs returns 404 or CSP blocks CDN
 If Swagger UI doesn't render, check:
 1. Proxy rule should be `proxy_pass http://127.0.0.1:8100/docs` (strip `/api` prefix)
-2. CSP header needs `https://cdn.jsdelivr.net` in `script-src` and `style-src`
+2. CSP header needs `https://cdn.jsdelivr.net` in `script-src`, `style-src`, and `connect-src` for Swagger UI bundle to load
+3. `/openapi.json` must be reachable at the root — add explicit nginx location if Swagger UI fails to fetch the schema
+
+**CSP required for Swagger UI:**
+```
+Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https://militarymanuals.ai https://cdn.jsdelivr.net; ...
+```
 
 ### Service not found
 ```bash
