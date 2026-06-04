@@ -16,7 +16,17 @@ ZK-RAG is a document processing pipeline that produces verifiable, on-chain regi
 - **Qdrant** — Vector database for embeddings (systemd service)
 - **Pipelines A → D → E → F** — Extract → chunk+embed → prove → verify+register
 
----
+## Admin Endpoints
+
+Admin routes are **disabled in production** (VPS). Set `DISABLE_ADMIN_ROUTES=1` in `/home/deruyter/rag/.env` — this guards admin route registration at startup. Admin routes are absent from the OpenAPI schema when disabled; all `/api/admin/*` paths return 404.
+
+Enable only for local development:
+```bash
+DISABLE_ADMIN_ROUTES=0
+sudo systemctl restart zk-rag-api
+```
+
+## Environment Variables
 
 ## Repository Structure
 
@@ -66,6 +76,7 @@ ZK_MERKLE_TREES_DIR        ← Path to merkleTrees/ directory
 ZK_CHUNKS_DIR              ← Path to chunks/ directory
 ZK_PROOFS_DIR              ← Path to zk_proofs/ directory
 ZK_REGISTRY_PATH           ← Path to registry.json
+DISABLE_ADMIN_ROUTES       ← Set to 1 in production (VPS) to disable admin endpoints
 ```
 
 ---

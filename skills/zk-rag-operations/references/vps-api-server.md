@@ -23,9 +23,9 @@ sudo openresty -s reload
 ## Key VPS Endpoints (public)
 | Endpoint | Status | Notes |
 |---|---|---|
-| `GET /health` | ✅ 200 | FastAPI registers at `/health`, not `/api/health` — needs explicit nginx proxy |
-| `GET /api/docs` | ✅ 200 | Swagger UI |
-| `GET /api/openapi.json` | ✅ 200 | OpenAPI spec |
+| `GET /api/health` | ✅ 200 | Health check |
+| `GET /api/docs` | ✅ 200 | Swagger UI (FastAPI docs disabled → public schema only) |
+| `GET /api/openapi.json` | ✅ 200 | OpenAPI spec (admin routes absent when `DISABLE_ADMIN_ROUTES=1`) |
 | `GET /api/manifest` | ✅ 200 | API manifest |
 | `GET /api/catalog` | ✅ 200 | Document catalog |
 | `POST /api/query` | ✅ 200 | Semantic search |
@@ -33,7 +33,27 @@ sudo openresty -s reload
 | `POST /api/provenance/prove` | ✅ 200 | ZK prove |
 | `POST /api/provenance/submit` | ✅ 200 | Kurier submit |
 | `GET /api/provenance/status/{job_id}` | ✅ 200 | Status poll |
-| `GET /api/provenance/poll/{job_id}` | ✅ 200 | Browser poll |
+| `GET /api/provenance/poll/{job_id}` | ✅ 200 | Browser poll (bypasses nginx auth layer) |
+| `GET /api/source/{doc_id}/info` | ✅ 200 | Document metadata + X402 price for paid download |
+| `GET /api/source/{doc_id}` | ✅ 402 | Stream PDF — returns 402 without valid X402 payment proof |
+
+## Admin Endpoints
+
+Admin routes are **disabled by default in production** via the `DISABLE_ADMIN_ROUTES` environment variable.
+
+When `DISABLE_ADMIN_ROUTES=1` is set in `/home/deruyter/rag/.env`:
+- Admin routes are never registered with FastAPI — absent from OpenAPI schema
+- All `/api/admin/*` paths return `404 Not Found`
+- Public endpoints continue to work normally
+
+To enable admin routes (local dev only):
+```bash
+# In .env
+DISABLE_ADMIN_ROUTES=0
+sudo systemctl restart zk-rag-api
+```
+
+**CAUTION:** Never set `DISABLE_ADMIN_ROUTES=0` on the public VPS without separate admin network isolation.
 
 ## Common VPS Issues
 
