@@ -1,6 +1,6 @@
 # ZK-RAG — Zero-Knowledge Retrieval-Augmented Generation
 
-A production-grade RAG system with cryptographic ZK proofs of provenance, built on Horizen EVM with plonky2 zero-knowledge circuits.
+|A production-grade RAG system with cryptographic ZK proofs of provenance, verified on [zkVerify](https://zkverify.io) with Plonky2 zero-knowledge circuits. The proofs execute on Horizen EVM as the settlement layer.
 
 > **This is the public scaffold.** It contains all pipeline scripts, contracts, circuits, and frontend — everything needed to run your own ZK-RAG system. The `data/` directory is empty; point the pipelines at your own document corpus.
 
@@ -29,8 +29,9 @@ flowchart TD
     F["F: commit root on Horizen EVM"]
     G["G: Qdrant payload + ZK metadata"]
     API["Query API + ZK proof generation"]
+    ZK["zkVerify — proof submission & verification"]
 
-    PDF --> A --> B --> D --> E --> F --> G --> API
+    PDF --> A --> B --> D --> E --> F --> G --> API --> ZK
 ```
 
 | Stage | What happens |
@@ -41,6 +42,7 @@ flowchart TD
 | **E** | Build a Poseidon Merkle tree over all chunks (plonky2) |
 | **F** | Commit the Merkle root to the Horizen EVM MerkleRootRegistry contract |
 | **G** | Store Merkle proof path + ZK circuit metadata in Qdrant alongside each chunk |
+| **ZK** | ZK proofs of provenance are submitted to [zkVerify](https://zkverify.io) for verification — the proofs execute on Horizen EVM as the settlement layer |
 
 ---
 
@@ -61,10 +63,10 @@ forge script script/DeployV2.s.sol --rpc-url $MAINNET_RPC_URL --broadcast --veri
 
 After deployment, update `CONTRACT_ADDRESS` in `.env` with the new contract address.
 
-**Reference deployments (verify on [Horizen block explorer](https://horizen.calderaexplorer.xyz)):**
-
+| **Reference deployments (verify on [zkVerify block explorer](https://zkverify.io)):**
+|
 | Network | Contract | Address |
-|---------|----------|---------|
+| ---------|----------|---------|
 | Horizen Testnet | MerkleRootRegistry V1 | `0x83166A340c0A61bc836BD6383aD4acB23a3E3176` |
 | Horizen Mainnet | MerkleRootRegistry V2 | `0x462fc86E28c07798BD4656451611FE4E0A6D7760` |
 
