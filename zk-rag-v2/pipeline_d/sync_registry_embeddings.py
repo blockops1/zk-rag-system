@@ -19,9 +19,9 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-EMBEDDINGS_DIR = Path("../data/embeddings")
-CHECKPOINT_PATH = Path("../data/.checkpoint.embed_docs_cpu.json")
-REGISTRY_PATH = Path("../data/registry.json")
+EMBEDDINGS_DIR = Path("./data/embeddings")
+CHECKPOINT_PATH = Path("./data/.checkpoint.embed_docs_cpu.json")
+REGISTRY_PATH = Path("./data/registry.json")
 BACKUP_SUFFIX = f".backup-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
 
 

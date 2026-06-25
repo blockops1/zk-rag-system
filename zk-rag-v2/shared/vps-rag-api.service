@@ -1,0 +1,28 @@
+[Unit]
+Description=ZK-RAG API Server (in-process embedding)
+After=network.target qdrant.service
+Wants=qdrant.service
+
+[Service]
+Type=simple
+User=deruyter
+Group=deruyter
+WorkingDirectory=/home/deruyter/rag
+Environment="PYTHONPATH=/home/deruyter/rag"
+Environment="IMAGES_DIR=/data/rag/images/"
+Environment="REGISTRY_PATH=/data/rag/registry.json"
+Environment="ZK_PROVE_BINARY=/data/rag/zk-circuit/prove-bin"
+Environment="ZK_MERKLE_TREES_DIR=/data/rag/merkleTrees"
+Environment="ZK_CHUNKS_DIR=/data/rag/chunks"
+Environment="ZK_PROOFS_DIR=/data/rag/zk_proofs"
+Environment="ZK_LOG_DIR=/home/deruyter/..../data/logs"
+Environment="ZK_PROOF_PARALLELISM=4"
+EnvironmentFile=/home/deruyter/rag/.env
+ExecStart=/home/deruyter/rag/venv/bin/python3 /home/deruyter/rag/api_server.py
+Restart=always
+RestartSec=5s
+StandardOutput=append:/home/deruyter/..../data/logs/api_stdout.log
+StandardError=append:/home/deruyter/..../data/logs/api_stderr.log
+
+[Install]
+WantedBy=multi-user.target

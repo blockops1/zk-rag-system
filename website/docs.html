@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Reference — ZK-RAG</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #0a0e1a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e2e8f0; }
+nav { display: flex; align-items: center; padding: 1em 2em; background: #111827; border-bottom: 1px solid #1e3a5f; gap: 1em; }
+nav a { color: #7dd3fc; text-decoration: none; font-size: 0.9em; }
+nav a:hover { text-decoration: underline; }
+nav .sep { color: #4a5568; }
+nav h1 { margin: 0; font-size: 1em; color: #e2e8f0; font-weight: normal; }
+main { max-width: 900px; margin: 0 auto; padding: 2em; }
+h2 { color: #7dd3fc; border-bottom: 1px solid #1e3a5f; padding-bottom: 0.3em; margin-top: 2em; }
+.endpoint { background: #111827; border-radius: 8px; padding: 1.2em 1.5em; margin: 1em 0; border-left: 4px solid #2a5a8c; }
+.method { display: inline-block; font-family: monospace; font-weight: bold; padding: 0.2em 0.6em; border-radius: 4px; font-size: 0.85em; margin-right: 0.5em; }
+.method-get { background: #1a4a2e; color: #4ade80; }
+.method-post { background: #1a3a1a; color: #a3e635; }
+.method-delete { background: #4a1a1a; color: #f87171; }
+.path { font-family: monospace; font-size: 1em; color: #e2e8f0; }
+.summary { color: #94a3b8; margin: 0.5em 0 0 0; font-size: 0.9em; }
+.params { margin-top: 0.8em; font-size: 0.85em; }
+.param { padding: 0.3em 0; border-bottom: 1px solid #1e2d3d; }
+.param-name { font-family: monospace; color: #7dd3fc; }
+.param-in { color: #64748b; font-size: 0.8em; }
+.prop-type { color: #4ade80; }
+.prop-desc { color: #64748b; font-size: 0.9em; }
+.request-body { margin-top: 0.8em; }
+.json-example { background: #0d1525; border-radius: 6px; padding: 1em; margin-top: 0.5em; font-family: monospace; font-size: 0.8em; color: #94a3b8; white-space: pre-wrap; overflow-x: auto; }
+.info-section { background: #111827; border-radius: 8px; padding: 1.5em; margin: 1em 0; }
+.info-section h3 { margin: 0 0 0.5em 0; color: #7dd3fc; }
+.resp { padding: 0.2em 0; }
+.resp-code { font-family: monospace; color: #a78bfa; }
+</style>
+</head>
+<body>
+<nav>
+  <a href="/">&#8592; Back to ZK-RAG Demo</a>
+  <span class="sep">|</span>
+  <h1>ZK-RAG API Reference — 0.1.0</h1>
+</nav>
+<main>
+<div class="info-section">
+<h3>RAG Query API Server</h3>
+<p></p>
+<p style="color:#64748b;font-size:0.85em;margin-top:0.5em;">OpenAPI 3.1 &middot; Base: <span style="font-family:monospace;color:#7dd3fc;">https://militarymanuals.ai</span></p>
+</div>
+
+<h2>Endpoints</h2>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/admin/document/{doc_id}</span>
+<p class="summary">Admin Get Document</p>
+<p class="summary">Return full document detail: all chunks + per-page image list.
+
+Searches all known collections in parallel for all chunks belonging to doc_id.
+Requires X-Admin-Key header.</p>
+<div class="params">
+<div class="param"><span class="param-name">doc_id</span> <span class="param-in">(path)</span> <span class="prop-type">string</span> <em style="color:#f87171;font-size:0.8em">required</em></div>
+<div class="param"><span class="param-name">x-admin-key</span> <span class="param-in">(header)</span> <span class="prop-type">string</span></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-delete">DELETE</span><span class="path">/api/admin/document/{doc_id}</span>
+<p class="summary">Admin Delete Document</p>
+<p class="summary">Delete a document from Qdrant, registry.json, and image files.
+
+Requires X-Admin-Key header.</p>
+<div class="params">
+<div class="param"><span class="param-name">doc_id</span> <span class="param-in">(path)</span> <span class="prop-type">string</span> <em style="color:#f87171;font-size:0.8em">required</em></div>
+<div class="param"><span class="param-name">x-admin-key</span> <span class="param-in">(header)</span> <span class="prop-type">string</span></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/admin/documents</span>
+<p class="summary">Admin List Documents</p>
+<p class="summary">Return all documents from registry with chunk counts from Qdrant.
+
+Requires X-Admin-Key header.</p>
+<div class="params">
+<div class="param"><span class="param-name">x-admin-key</span> <span class="param-in">(header)</span> <span class="prop-type">string</span></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-delete">DELETE</span><span class="path">/api/cache/collections</span>
+<p class="summary">Invalidate Collections Cache</p>
+<p class="summary">Invalidate the collections metadata cache. Call after updating collection data.</p>
+<div class="params">
+<div class="param"><span class="param-name">collection</span> <span class="param-in">(query)</span> <span class="prop-type">string</span><br><span class="prop-desc">Optional: invalidate only this collection</span></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-delete">DELETE</span><span class="path">/api/cache/images</span>
+<p class="summary">Invalidate Image Cache</p>
+<p class="summary">Invalidate the image listing cache. Call after image ingestion.</p>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-delete">DELETE</span><span class="path">/api/cache/query</span>
+<p class="summary">Invalidate Query Cache</p>
+<p class="summary">Invalidate the content-addressed query result cache. Call after pipelines F or G upsert data.</p>
+<div class="params">
+<div class="param"><span class="param-name">collection</span> <span class="param-in">(query)</span> <span class="prop-type">string</span><br><span class="prop-desc">Optional: invalidate only this collection's query cache</span></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/catalog</span>
+<p class="summary">Get Catalog</p>
+<p class="summary">Return documents grouped by branch/collection, filtered to only those indexed in Qdrant.
+
+Titles, pub_year, category, page_count, and ia_identifier are sourced directly
+from Qdrant payloads — the same data stored at ingest time from the registry.
+This ensures the catalog always reflects the authoritative Qdrant state.</p>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/collection/search</span>
+<p class="summary">Search Collection</p>
+<p class="summary">Semantic search within a specific collection.
+
+Returns matching chunks from all documents in the collection,
+ranked by vector similarity.</p>
+<div class="params">
+<div class="param"><span class="param-name">collection</span> <span class="param-in">(query)</span> <span class="prop-type">string</span> <em style="color:#f87171;font-size:0.8em">required</em><br><span class="prop-desc">Collection name</span></div>
+<div class="param"><span class="param-name">q</span> <span class="param-in">(query)</span> <span class="prop-type">string</span> <em style="color:#f87171;font-size:0.8em">required</em><br><span class="prop-desc">Search query</span></div>
+<div class="param"><span class="param-name">top_k</span> <span class="param-in">(query)</span> <span class="prop-type">integer</span><br><span class="prop-desc">Max results to return</span></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/collections</span>
+<p class="summary">List Collections</p>
+<p class="summary">List all collections with their metadata (parallel fetch, Ruff-style).</p>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/collections/{collection}</span>
+<p class="summary">Get Collection</p>
+<p class="summary">Get info for a single collection.</p>
+<div class="params">
+<div class="param"><span class="param-name">collection</span> <span class="param-in">(path)</span> <span class="prop-type">string</span> <em style="color:#f87171;font-size:0.8em">required</em></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/context</span>
+<p class="summary">Get Context</p>
+<p class="summary">Get chunks from a document.
+
+Two modes:
+- No query param + limit=0: returns sequential chunks centered around chunk_index (window-based).
+- No query param + limit&gt;0: returns up to `limit` consecutive chunks starting at chunk_index.
+- With query param: returns semantically ranked chunks matching the query,
+  filtered to this document only (top_k = window param).
+
+Args:
+    doc_id: The document ID
+    chunk_index: The center chunk index for sequential mode (0-based)
+    collection: The collection name
+    window: For sequential mode, window size (2*window+1 chunks returned).
+            For semantic mode, top_k limit.
+    query: If provided, triggers semantic search within this document</p>
+<div class="params">
+<div class="param"><span class="param-name">doc_id</span> <span class="param-in">(query)</span> <span class="prop-type">string</span> <em style="color:#f87171;font-size:0.8em">required</em><br><span class="prop-desc">Document ID</span></div>
+<div class="param"><span class="param-name">chunk_index</span> <span class="param-in">(query)</span> <span class="prop-type">integer</span><br><span class="prop-desc">Chunk index (0-based)</span></div>
+<div class="param"><span class="param-name">collection</span> <span class="param-in">(query)</span> <span class="prop-type">string</span> <em style="color:#f87171;font-size:0.8em">required</em><br><span class="prop-desc">Collection name</span></div>
+<div class="param"><span class="param-name">window</span> <span class="param-in">(query)</span> <span class="prop-type">integer</span><br><span class="prop-desc">Window size (returns 2*window+1 chunks, used when limit is not set)</span></div>
+<div class="param"><span class="param-name">query</span> <span class="param-in">(query)</span> <span class="prop-type">string</span><br><span class="prop-desc">Optional: semantic search query within this document</span></div>
+<div class="param"><span class="param-name">limit</span> <span class="param-in">(query)</span> <span class="prop-type">integer</span><br><span class="prop-desc">If &gt; 0, return up to this many consecutive chunks starting at chunk_index (ignores window)</span></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/doc/{doc_id}</span>
+<p class="summary">Get Document</p>
+<p class="summary">Get document metadata from Qdrant payload.
+
+Returns document metadata from the first matching point found.
+Searches across all known collections using Qdrant filters for efficiency.
+
+Args:
+    doc_id: The document ID to retrieve metadata for
+    
+Returns:
+    Dictionary with document metadata fields (title, branch, category, etc.)</p>
+<div class="params">
+<div class="param"><span class="param-name">doc_id</span> <span class="param-in">(path)</span> <span class="prop-type">string</span> <em style="color:#f87171;font-size:0.8em">required</em></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/images/{doc_id}/{page_num}</span>
+<p class="summary">List Images For Page</p>
+<p class="summary">List images for a specific page of a document.
+
+Args:
+    doc_id: The document ID
+    page_num: The page number to list images for
+    
+Returns:
+    Dictionary with 'images' list containing image filenames for that page</p>
+<div class="params">
+<div class="param"><span class="param-name">doc_id</span> <span class="param-in">(path)</span> <span class="prop-type">string</span> <em style="color:#f87171;font-size:0.8em">required</em></div>
+<div class="param"><span class="param-name">page_num</span> <span class="param-in">(path)</span> <span class="prop-type">integer</span> <em style="color:#f87171;font-size:0.8em">required</em></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/manifest</span>
+<p class="summary">Api Manifest</p>
+<p class="summary">Return machine-readable API manifest auto-generated from FastAPI routes.
+
+No manual maintenance — every route registered with the app appears here.</p>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/openapi.json</span>
+<p class="summary">Get Openapi Json</p>
+<p class="summary">Return OpenAPI 3.1 specification auto-generated from FastAPI routes.
+
+This is a proxy to FastAPI's built-in openapi schema — no manual
+maintenance required. Every route registered with the app automatically
+appears here.</p>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/provenance/poll/{job_id}</span>
+<p class="summary">Poll Kurier Status</p>
+<p class="summary">Poll Kurier job status — no auth required.
+
+This is a thin proxy to poll_zkverify_job that bypasses nginx's
+auth layer so browsers can poll without an API key.</p>
+<div class="params">
+<div class="param"><span class="param-name">job_id</span> <span class="param-in">(path)</span> <span class="prop-type">string</span> <em style="color:#f87171;font-size:0.8em">required</em></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-post">POST</span><span class="path">/api/provenance/prove</span>
+<p class="summary">Prove Chunk</p>
+<p class="summary">Generate a ZK proof for a specific chunk identified by doc_id and chunk_id.
+
+Takes a doc_id + chunk_id + collection, fetches the chunk from Qdrant,
+generates a ZK proof for it, and returns the chunk payload plus proof fields.
+
+Used by the website's next/previous chunk navigation with provenance.</p>
+<div class="request-body"><strong style="color:#94a3b8;font-size:0.85em;">Request body &middot; application/json</strong>
+<div class="param"><span class="param-name">$ref</span> <span class="prop-type">ProvenanceProveRequest</span></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/provenance/status/{job_id}</span>
+<p class="summary">Get Proof Status</p>
+<p class="summary">Poll Kurier job status for a proof verification job.
+
+Returns current status and, if complete, the verification result.</p>
+<div class="params">
+<div class="param"><span class="param-name">job_id</span> <span class="param-in">(path)</span> <span class="prop-type">string</span> <em style="color:#f87171;font-size:0.8em">required</em></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-post">POST</span><span class="path">/api/provenance/submit</span>
+<p class="summary">Submit Proof</p>
+<p class="summary">Submit a ZK proof to Kurier/zkVerify for on-chain verification.
+
+Accepts proof data directly (no server-side cache required).
+Returns job_id immediately for polling.</p>
+<div class="request-body"><strong style="color:#94a3b8;font-size:0.85em;">Request body &middot; application/json</strong>
+<div class="param"><span class="param-name">$ref</span> <span class="prop-type">ProveSubmitRequest</span></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-post">POST</span><span class="path">/api/query</span>
+<p class="summary">Query</p>
+<p class="summary">Vector search endpoint using Qdrant similarity search.
+
+Accepts a natural language query and returns relevant document chunks
+from Qdrant using vector similarity search.
+
+Supports single collection search or cross-collection search with collection='*'.
+
+Args:
+    request: QueryRequest with query text, top_k, and collection
+    
+Returns:
+    QueryResponse with matching chunks, query, collection, and total count</p>
+<div class="request-body"><strong style="color:#94a3b8;font-size:0.85em;">Request body &middot; application/json</strong>
+<div class="param"><span class="param-name">$ref</span> <span class="prop-type">QueryRequest</span></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-post">POST</span><span class="path">/api/query-provable</span>
+<p class="summary">Query Provable</p>
+<p class="summary">Vector search with ZK proofs attached to every result chunk.
+
+Flow:
+    1. Query Qdrant (vector similarity)
+    2. Generate ZK proofs in parallel for all result chunks
+    3. Return only chunks that have successfully generated proofs
+
+No chunk text is returned for a chunk unless its ZK proof exists.
+Proof generation runs in parallel, capped by ZK_PROOF_PARALLELISM env var
+(default 2, set to 4 on the R730, 2 on the VPS).
+
+Args:
+    request: QueryProvanableRequest with query text, top_k, and collection
+
+Returns:
+    QueryProvanableResponse with chunks (each with zk_proof attached),
+    plus a proofs dict keyed by chunk_id.</p>
+<div class="request-body"><strong style="color:#94a3b8;font-size:0.85em;">Request body &middot; application/json</strong>
+<div class="param"><span class="param-name">$ref</span> <span class="prop-type">QueryProvanableRequest</span></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/source/{doc_id}</span>
+<p class="summary">Get Source Pdf</p>
+<p class="summary">Stream the source PDF for a document, requiring X402 payment proof.
+
+Without a Payment-Signature header: returns 402 with PAYMENT-REQUIRED.
+With a valid EIP-3009 PaymentPayload: streams the PDF file.</p>
+<div class="params">
+<div class="param"><span class="param-name">doc_id</span> <span class="param-in">(path)</span> <span class="prop-type">string</span> <em style="color:#f87171;font-size:0.8em">required</em></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/api/source/{doc_id}/info</span>
+<p class="summary">Get Source Info</p>
+<p class="summary">Return document metadata and price for paid PDF download.</p>
+<div class="params">
+<div class="param"><span class="param-name">doc_id</span> <span class="param-in">(path)</span> <span class="prop-type">string</span> <em style="color:#f87171;font-size:0.8em">required</em></div>
+</div>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+<div class="resp"><span class="resp-code">422</span> Validation Error</div>
+</div>
+</div>
+<div class="endpoint">
+<span class="method method-get">GET</span><span class="path">/health</span>
+<p class="summary">Health</p>
+<p class="summary">Health check endpoint — verifies Qdrant and embedding service.</p>
+<div class="params"><strong style="color:#94a3b8;font-size:0.85em;">Responses</strong>
+<div class="resp"><span class="resp-code">200</span> Successful Response</div>
+</div>
+</div>
+
+</main>
+</body>
+</html>

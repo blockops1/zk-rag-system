@@ -1,0 +1,18 @@
+[Unit]
+Description=Qdrant Vector Database
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deruyter
+Group=deruyter
+WorkingDirectory=/data/rag
+ExecStart=/usr/local/bin/qdrant --config-path /data/rag/qdrant_data/config/config.yaml
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/deruyter/..../data/logs/qdrant_stdout.log
+StandardError=append:/home/deruyter/..../data/logs/qdrant_stderr.log
+
+[Install]
+WantedBy=multi-user.target

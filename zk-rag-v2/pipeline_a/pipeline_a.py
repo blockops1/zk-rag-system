@@ -8,10 +8,10 @@ Image extraction: page.get_pixmap() renders the fully-rotated, right-side-up
 page to a PNG. Canonical "what you see when you open the PDF."
 
 Output:
-  ../data/extracted/{sha256}/
+  ./data/extracted/{sha256}/
     manifest.json
     pages/  0000.json  0001.json  ...
-  ../data/images/{sha256}/
+  ./data/images/{sha256}/
     manifest.json
     page_0000.png  page_0001.png  ...   (full-page PNG renders)
 """
@@ -29,11 +29,11 @@ from pathlib import Path
 import fitz  # pymupdf
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-REGISTRY_PATH = Path("../data/registry.json")
-SOURCE_PDFS   = Path("../data/sourcePDF")
-EXTRACTED_DIR = Path("../data/extracted")
-IMAGES_DIR    = Path("../data/images")
-DONE_LOG      = Path("../data/pipeline_a_done.json")
+REGISTRY_PATH = Path("./data/registry.json")
+SOURCE_PDFS   = Path("./data/sourcePDF")
+EXTRACTED_DIR = Path("./data/extracted")
+IMAGES_DIR    = Path("./data/images")
+DONE_LOG      = Path("./data/pipeline_a_done.json")
 LOG_DIR       = Path("./logs")
 
 BRANCH_DIRS = {

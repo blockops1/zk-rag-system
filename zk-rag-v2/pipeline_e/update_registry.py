@@ -3,7 +3,7 @@
 update_registry.py — Update registry fields from a Pipeline E Merkle tree JSON.
 
 Usage:
-    python3 update_registry.py <doc_id> [--tree-dir ../data/merkleTrees]
+    python3 update_registry.py <doc_id> [--tree-dir ./data/merkleTrees]
 
 Reads <doc_id>_tree.json, looks up the doc in the registry, and updates:
     has_merkle_tree    = true
@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-REGISTRY_PATH = Path("../data/registry.json")
+REGISTRY_PATH = Path("./data/registry.json")
 
 
 def update_registry(doc_id: str, tree_dir: Path) -> bool:
@@ -81,7 +81,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     doc_id = sys.argv[1]
-    tree_dir = Path("../data/merkleTrees")
+    tree_dir = Path("./data/merkleTrees")
 
     if "--tree-dir" in sys.argv:
         idx = sys.argv.index("--tree-dir")

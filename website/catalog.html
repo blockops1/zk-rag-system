@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Catalog — Search Military Doctrine</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a2414;
+      color: #c8d0b8;
+      line-height: 1.6;
+      padding: 20px;
+    }
+    .container { max-width: 960px; margin: 0 auto; }
+    h1 { color: #e8e4d4; margin-bottom: 10px; }
+    h2 { color: #e8e4d4; margin: 30px 0 15px; border-bottom: 1px solid #3d4d2a; padding-bottom: 10px; }
+    .hero { background: #243318; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    .hero p { color: #b0b0b0; }
+    .back-link { color: #5a8a3c; text-decoration: none; font-size: 0.9em; }
+    .back-link:hover { text-decoration: underline; }
+    code { background: #1a2414; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+    .loading { text-align: center; padding: 40px; color: #8a9a7a; }
+    .error { background: #3a1a1a; border-left: 3px solid #ff6b6b; padding: 15px; border-radius: 6px; color: #ff8a8a; }
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab {
+      background: #243318;
+      color: #8a9a7a;
+      border: 1px solid #3d4d2a;
+      border-bottom: none;
+      border-radius: 6px 6px 0 0;
+      padding: 8px 18px;
+      cursor: pointer;
+      font-size: 0.9em;
+      transition: background 0.15s, color 0.15s;
+    }
+    .tab:hover { background: #2d3d1f; color: #b0b0b0; }
+    .tab.active { background: #5a8a3c; color: #1a2414; font-weight: 600; border-color: #5a8a3c; }
+    /* Collection panel */
+    .collection-panel { display: none; }
+    .collection-panel.active { display: block; }
+    .collection-header { margin-bottom: 20px; }
+    .collection-header h3 { color: #e8e4d4; margin-bottom: 6px; }
+    .collection-meta { color: #8a9a7a; font-size: 0.85em; margin-bottom: 10px; }
+    /* Doc list */
+    .doc-list { display: flex; flex-direction: column; gap: 8px; }
+    .doc-card {
+      background: #243318;
+      border: 1px solid #2d3d1f;
+      border-radius: 6px;
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      transition: border-color 0.15s;
+    }
+    .doc-card:hover { border-color: #5a8a3c; }
+    .doc-info { flex: 1; min-width: 0; }
+    .doc-title { color: #e8e4d4; font-weight: 600; margin-bottom: 4px; word-break: break-word; }
+    .doc-meta { color: #8a9a7a; font-size: 0.82em; display: flex; gap: 12px; flex-wrap: wrap; }
+    .doc-meta span { display: flex; align-items: center; gap: 4px; }
+    .doc-links { display: flex; gap: 10px; flex-shrink: 0; flex-wrap: wrap; align-items: center; }
+    .doc-links a {
+      color: #5a8a3c;
+      text-decoration: none;
+      font-size: 0.85em;
+      white-space: nowrap;
+    }
+    .doc-links a:hover { text-decoration: underline; }
+    .doc-links .search-btn {
+      background: #5a8a3c;
+      color: #1a2414;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 12px;
+      font-size: 0.82em;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .doc-links .search-btn:hover { background: #4a7a32; }
+    /* Source PDF download button */
+    footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #3d4d2a; color: #8a9a7a; font-size: 0.9em; }
+    footer a { color: #5a8a3c; }
+    @media (max-width: 600px) {
+      .doc-card { flex-direction: column; gap: 10px; }
+      .doc-links { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← Back to Search</a>
+
+    <h1 style="margin-top: 16px;">Document Catalog</h1>
+    <div class="hero">
+      <p><strong style="color:#c8a830;">525,000+ pages of official military doctrine — finally searchable.</strong> Browse by collection below. Use <em>Search within this document</em> to find precise passages from any single manual.</p>
+    </div>
+
+    <div id="loading" class="loading">Loading catalog…</div>
+    <div id="error" class="error" style="display:none;"></div>
+
+    <div id="tabs" class="tabs" style="display:none;"></div>
+    <div id="panels" style="display:none;"></div>
+
+    <footer>
+      <a href="/">← Back to Search</a> · ZK-RAG Demo
+    </footer>
+  </div>
+
+  <script>
+    const API_BASE = window.location.protocol + '//' + window.location.host + '/api';
+    const loading = document.getElementById('loading');
+    const errorEl = document.getElementById('error');
+    const tabsContainer = document.getElementById('tabs');
+    const panelsContainer = document.getElementById('panels');
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function showError(msg) {
+      loading.style.display = 'none';
+      errorEl.style.display = 'block';
+      errorEl.textContent = msg;
+    }
+
+    async function init() {
+      let catalog;
+      try {
+        const resp = await fetch(`${API_BASE}/catalog`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.statusText}`);
+        catalog = await resp.json();
+      } catch (err) {
+        showError('Failed to load catalog: ' + err.message);
+        return;
+      }
+
+      loading.style.display = 'none';
+      tabsContainer.style.display = 'flex';
+      panelsContainer.style.display = 'block';
+
+      catalog.forEach((collection, idx) => {
+        const tab = document.createElement('button');
+        tab.className = 'tab' + (idx === 0 ? ' active' : '');
+        tab.textContent = `${collection.name} (${collection.document_count})`;
+        tab.addEventListener('click', () => switchTab(idx));
+        tabsContainer.appendChild(tab);
+
+        const panel = document.createElement('div');
+        panel.className = 'collection-panel' + (idx === 0 ? ' active' : '');
+        panel.id = `panel-${idx}`;
+
+        const header = document.createElement('div');
+        header.className = 'collection-header';
+        header.innerHTML = `
+          <h3>${escapeHtml(collection.name)}</h3>
+          <p class="collection-meta">${escapeHtml(collection.description)}</p>
+          <p class="collection-meta">${collection.document_count} document${collection.document_count !== 1 ? 's' : ''}</p>
+        `;
+        panel.appendChild(header);
+
+        const list = document.createElement('div');
+        list.className = 'doc-list';
+
+        if (!collection.documents || collection.documents.length === 0) {
+          list.innerHTML = '<div style="color:#888;padding:20px 0;">No documents in this collection.</div>';
+        } else {
+          collection.documents.forEach(doc => {
+            const searchBtn = doc.doc_id
+              ? `<a href="/docsearch.html?doc_id=${escapeHtml(doc.doc_id)}&collection=${escapeHtml(collection.name)}&title=${encodeURIComponent(doc.title || '')}&branch=${escapeHtml(collection.name)}" class="search-btn">🔍 Search within this document</a>`
+              : '';
+
+            const metaParts = [];
+            if (doc.category) metaParts.push(escapeHtml(doc.category));
+            if (doc.pub_year) metaParts.push(String(doc.pub_year));
+            if (doc.page_count) metaParts.push(`${doc.page_count} pages`);
+
+            const card = document.createElement('div');
+            card.className = 'doc-card';
+            card.innerHTML = `
+              <div class="doc-info">
+                <div class="doc-title">${escapeHtml(doc.title)}</div>
+                <div class="doc-meta">${metaParts.map(m => `<span>${m}</span>`).join('')}</div>
+              </div>
+              <div class="doc-links">
+                ${searchBtn}
+              </div>
+            `;
+            list.appendChild(card);
+          });
+        }
+
+        panel.appendChild(list);
+        panelsContainer.appendChild(panel);
+      });
+    }
+
+    function switchTab(idx) {
+      document.querySelectorAll('.tab').forEach((t, i) => {
+        t.classList.toggle('active', i === idx);
+      });
+      document.querySelectorAll('.collection-panel').forEach((p, i) => {
+        p.classList.toggle('active', i === idx);
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

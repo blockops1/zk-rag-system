@@ -5,7 +5,7 @@ Pipeline D — Chunk + Embed (OFFLINE ONLY — no Qdrant writes)
 Uses LlamaIndex HierarchicalNodeParser + SemanticDoubleMergingSplitterNodeParser
 for chunking, and mlx-embeddings + Qwen/Qwen3-Embedding-8B for embeddings.
 
-Reads page JSONs from ingested-vision/{doc_id}/ (),
+Reads page JSONs from ingested-vision/{doc_id}/ (or ingested/{doc_id}/ if vision is older),
 chunks them (via chunk_document.py) and embeds them to disk.
 
 Qdrant upsert is handled separately by Pipeline F — not this script.
@@ -30,14 +30,15 @@ sys.path.insert(0, str(Path(__file__).parent))
 from chunk_document import _chunk_document
 
 # Paths
-V2_REGISTRY_FILE = Path("../data/registry.json")
-CHUNKS_DIR       = Path("../data/chunks")
-EMBEDDINGS_DIR   = Path("../data/embeddings")
-INGESTED_BASE    = Path("../data/extracted")
+V2_REGISTRY_FILE = Path("./data/registry.json")
+CHUNKS_DIR       = Path("./data/chunks")
+EMBEDDINGS_DIR   = Path("./data/embeddings")
+INGESTED_BASE    = Path("./data/extracted")
+VISION_BASE      = Path("./data/extractedVision")
 
 EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-8B"
 
-LOCK_FILE = Path(os.getenv("LOCK_FILE", "../data/.lock.pipeline_d"))
+LOCK_FILE = Path(os.getenv("LOCK_FILE", "./data/.lock.pipeline_d"))
 
 
 def acquire_lock():
@@ -61,11 +62,16 @@ def load_v2_registry() -> dict:
 def pick_source_dir(doc_id: str) -> tuple[Path | None, str]:
     """Choose the best source for page JSONs.
 
-    Returns (source_dir, source_label). Uses extracted/{doc_id}/.
+    Returns (source_dir, source_label).
+    Prefers ingested-vision/ if it exists — that means Pipeline C has already
+    run and added vision descriptions. Otherwise falls back to ingested/.
     """
+    vision_dir    = VISION_BASE   / doc_id
     ingested_dir  = INGESTED_BASE / doc_id
 
-    if ingested_dir.exists():
+    if vision_dir.exists():
+        return (vision_dir, "ingested-vision")
+    elif ingested_dir.exists():
         return (ingested_dir, "ingested")
     else:
         return (None, None)
@@ -122,7 +128,8 @@ def process_doc(doc_id: str, dry_run: bool = False) -> dict:
     if not doc_entry:
         return {"status": "not_found", "doc_id": doc_id}
 
-        source_dir, source_label = pick_source_dir(doc_id)
+    # Pick source (vision or plain) — same logic as chunk_document.py
+    source_dir, source_label = pick_source_dir(doc_id)
     if source_dir is None:
         return {"status": "no_pages", "doc_id": doc_id}
 
@@ -170,7 +177,9 @@ def run_pipeline(doc_id_filter: str | None = None, dry_run: bool = False):
     candidates = []
     for doc in registry.get("documents", []):
         doc_id = doc.get("doc_id", "")
-        if not (INGESTED_BASE / doc_id / "pages").exists():
+        if not (INGESTED_BASE / doc_id / "pages").exists() and not (
+            VISION_BASE / doc_id / "pages"
+        ).exists():
             continue
         if doc_id_filter and doc_id != doc_id_filter:
             continue

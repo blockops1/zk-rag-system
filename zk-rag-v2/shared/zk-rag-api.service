@@ -1,0 +1,17 @@
+[Unit]
+Description=RAG Query API Server
+After=network.target qdrant.service
+Wants=qdrant.service
+
+[Service]
+Type=simple
+User=blockops
+WorkingDirectory=./shared
+ExecStart=./venv/bin/python3 ./shared/api_server.py
+Restart=always
+RestartSec=5s
+StandardOutput=append:.../data/logs/api_server_stdout.log
+StandardError=append:.../data/logs/api_server_stderr.log
+
+[Install]
+WantedBy=multi-user.target

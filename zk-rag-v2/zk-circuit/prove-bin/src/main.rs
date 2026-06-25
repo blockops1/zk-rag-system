@@ -214,7 +214,7 @@ fn main() {
     init_tracing();
 
     // Default log dir — matches other ZK-RAG / military-documents apps
-    let log_dir = PathBuf::from("/data/military-documents/logs");
+    let log_dir = PathBuf::from(".../data/logs");
     let log_file = opts.log_file.unwrap_or_else(|| log_dir.join("prove.log"));
 
     let mut audit_file: Option<BufWriter<std::fs::File>> = Some({

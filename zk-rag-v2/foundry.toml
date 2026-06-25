@@ -1,5 +1,5 @@
 [profile.default]
 fs_permissions = [
-  { access = "read", path = "../data/" },
+  { access = "read", path = "./data/" },
   { access = "read-write", path = "./pipeline_f/broadcast/" }
 ]

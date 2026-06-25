@@ -8,7 +8,7 @@
 #   2. Ingest PDF -- text + images extracted, chunked, embedded
 #   3. Upsert to Qdrant (no deletes -- safe)
 #   4. Mark registry status=ingested
-#   5. Extract images to ../data/images/{doc_id}/
+#   5. Extract images to ./data/images/{doc_id}/
 #   6. Telegram notification per doc
 #
 # What it does NOT do: harvest, push
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 ME=$(basename "$0")
-RAG_DIR="."
+RAG_DIR="./"
 VENV_PY="${RAG_DIR}/venv/bin/python3"
 
 if [ $# -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then

@@ -43,12 +43,12 @@ import numpy as np  # noqa: E402 — must be after ONNX_NUM_THREADS env vars abo
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
-BASE_DIR         = Path(os.getenv("BASE_DIR",         "../data"))
-CHUNKS_DIR       = Path(os.getenv("CHUNKS_DIR",       "../data/chunks"))
-EMBEDDINGS_DIR   = Path(os.getenv("EMBEDDINGS_DIR",   "../data/embeddings"))
-LOG_DIR          = Path(os.getenv("LOG_DIR",          "../data/logs"))
-LOCK_FILE        = Path(os.getenv("LOCK_FILE",        "../data/.lock.embed_docs_cpu"))
-CHECKPOINT_FILE  = Path(os.getenv("CHECKPOINT_FILE",  "../data/.checkpoint.embed_docs_cpu.json"))
+BASE_DIR         = Path(os.getenv("BASE_DIR",         "/data/military-documents"))
+CHUNKS_DIR       = Path(os.getenv("CHUNKS_DIR",       "./data/chunks"))
+EMBEDDINGS_DIR   = Path(os.getenv("EMBEDDINGS_DIR",   "./data/embeddings"))
+LOG_DIR          = Path(os.getenv("LOG_DIR",          ".../data/logs"))
+LOCK_FILE        = Path(os.getenv("LOCK_FILE",        "./data/.lock.embed_docs_cpu"))
+CHECKPOINT_FILE  = Path(os.getenv("CHECKPOINT_FILE",  "./data/.checkpoint.embed_docs_cpu.json"))
 
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5")
 

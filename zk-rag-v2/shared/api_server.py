@@ -15,17 +15,27 @@ print(f"[api_server] Python: {sys.executable}", flush=True)
 print(f"[api_server] CWD: {os.getcwd()}", flush=True)
 print(f"[api_server] sys.path[0]: {sys.path[0]}", flush=True)
 
-# Fix sys.path so imports work regardless of working directory
-# Detect whether api_server.py lives inside a `shared/` subdirectory or at
-# the repo root, then add the appropriate parent to sys.path so `import shared` resolves.
+# Fix sys.path so imports work regardless of WorkingDirectory
+# __file__ = ./shared/api_server.py  (R730 layout)
+#          = /home/deruyter/rag/api_server.py              (VPS layout)
+# Detect which layout we're in and add the right parent to sys.path
 _this_file = os.path.abspath(__file__)
 _this_dir = os.path.dirname(_this_file)
 if os.path.basename(_this_dir) == "shared":
+    # R730 layout: api_server.py is inside shared/ subdirectory
     _project_root = os.path.dirname(_this_dir)
     sys.path.insert(0, _project_root)
 else:
+    # VPS layout: api_server.py is directly in /home/deruyter/rag/
+    # shared/ module files live at the same level, not in a subdirectory
+    # Add parent (/home/deruyter/) so `shared` resolves via the symlink below
     _project_root = os.path.dirname(_this_dir)
     sys.path.insert(0, _project_root)
+    # On VPS, /home/deruyter/shared is a symlink to /home/deruyter/rag/
+    # so `import shared` resolves to /home/deruyter/shared/ → /home/deruyter/rag/
+    _shared_link = os.path.join(_project_root, "shared")
+    if not os.path.islink(_shared_link) and not os.path.isdir(_shared_link):
+        os.symlink(_this_dir, _shared_link)
 print(f"[api_server] Added project root to sys.path: {_project_root}", flush=True)
 
 # Validate that shared/ is importable
@@ -36,7 +46,11 @@ except Exception as e:
     print(f"[api_server] FATAL: cannot import shared: {e}", flush=True, file=sys.stderr)
     raise
 
-print(f"[api_server] Imports phase starting...", flush=True)
+# Verify x402_paid_download exists
+_x402_path = os.path.join(os.path.dirname(_this_file), "x402_paid_download.py")
+print(f"[api_server] x402_paid_download.py exists: {os.path.exists(_x402_path)}", flush=True)
+
+print("[api_server] Imports phase starting...", flush=True)
 
 import hashlib
 import json
@@ -45,7 +59,15 @@ import logging.handlers
 import os
 import time
 import asyncio
-import httpx  # for httpx.HTTPError in exception handlers
+import httpx
+from collections import OrderedDict
+print("[api_server] x402 import starting...", flush=True)
+from x402_paid_download import (
+    verify_and_stream,
+    NETWORK_SPEC,
+    USDC_CONTRACT,
+)
+print("[api_server] x402 import OK", flush=True)
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, Header, Query
 from typing import Optional
@@ -58,6 +80,14 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from qdrant_client.http.exceptions import ApiException
 
+# Embedding service client (connection-pooled)
+_EMBEDDING_SERVICE_URL = "http://127.0.0.1:8200"
+_http_client: httpx.AsyncClient | None = None
+
+# Admin routes (cache invalidation, document listing) — guarded by env var
+_DISABLE_ADMIN_ROUTES = os.environ.get("DISABLE_ADMIN_ROUTES", "").lower() in ("1", "true", "yes")
+print(f"[api_server] _DISABLE_ADMIN_ROUTES = {_DISABLE_ADMIN_ROUTES}", flush=True)
+
 
 # ── Embedding model (fastembed, loaded once at startup) ──────────────────────
 #
@@ -67,9 +97,11 @@ from qdrant_client.http.exceptions import ApiException
 
 import threading
 
-MAX_CONCURRENT = min(os.cpu_count() or 1, 20)
+_MAX_CONCURRENT = int(os.environ.get("MAX_CONCURRENT", str(min(os.cpu_count() or 1, 12))))
+MAX_CONCURRENT = _MAX_CONCURRENT
 _encode_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT, thread_name_prefix="encode-")
 _encode_semaphore = threading.Semaphore(MAX_CONCURRENT)
+print(f"[api_server] MAX_CONCURRENT = {MAX_CONCURRENT} (cpu_count={os.cpu_count()})", flush=True)
 
 _embed_model = None
 _embed_model_loaded = False
@@ -94,6 +126,14 @@ def _load_embed_model():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load embedding model on startup; close thread pool on shutdown."""
+    global _http_client
+    print("[api_server] [lifespan] Configuring httpx limits...", flush=True)
+    # Note: httpx client is kept for x402 paid download calls, not for embeddings
+    _http_client = httpx.AsyncClient(
+        base_url="http://127.0.0.1:8200",  # kept for x402 compatibility
+        limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+        timeout=httpx.Timeout(60.0),
+    )
     print("[api_server] [lifespan] Loading embedding model...", flush=True)
     try:
         _load_embed_model()
@@ -102,6 +142,8 @@ async def lifespan(app: FastAPI):
         raise
     print("[api_server] [lifespan] Startup complete.", flush=True)
     yield
+    if _http_client:
+        await _http_client.aclose()
     _encode_executor.shutdown(wait=False)
     print("[api_server] Lifespan shutdown complete.", flush=True)
 
@@ -139,7 +181,7 @@ async def _embed_texts_async(texts: list[str]) -> list[list[float]]:
 
 
 # Configure logging to file
-LOG_DIR = "../data/logs"
+LOG_DIR = ".../data/logs"
 LOG_FILE = f"{LOG_DIR}/api_server.log"
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -164,12 +206,12 @@ print("[api_server] FastAPI app created OK", flush=True)
 # CORS middleware - specific origins only (no wildcard with credentials)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.environ.get("CORS_ORIGIN", "https://example.com")],
+    allow_origins=["https://militarymanuals.ai"],
     allow_credentials=True,
     allow_methods=["*"],
 )
 
-IMAGES_DIR = os.environ.get("IMAGES_DIR", "../data/images/")
+IMAGES_DIR = os.environ.get("IMAGES_DIR", "./data/images/")
 
 # Known collections
 KNOWN_COLLECTIONS = ["army", "navy", "marines", "coast_guard", "air_force", "joint", "other"]
@@ -187,7 +229,7 @@ _collections_cache: dict[str, tuple[float, dict]] = {}  # collection_name -> (ti
 
 # Query result cache - content-addressed, 5 minute TTL
 _QUERY_CACHE_TTL_SECONDS = 5 * 60
-_query_cache: dict[str, tuple[float, list]] = {}  # cache_key -> (timestamp, results_list)
+_query_cache: OrderedDict[str, tuple[float, list]] = {}  # cache_key -> (timestamp, results_list)
 _query_cache_meta: dict[str, dict] = {}  # cache_key -> {collection: str, ...}
 
 # Ingested doc_ids cache per collection - refreshed every 10 minutes
@@ -198,6 +240,10 @@ _ingested_docs_cache: dict[str, tuple[float, set[str]]] = {}  # collection -> (t
 # Returns full doc metadata (title, pub_year, category, page_count, ia_identifier) from Qdrant
 _CATALOG_DOCS_CACHE_TTL_SECONDS = 10 * 60
 _catalog_docs_cache: dict[str, tuple[float, dict[str, dict]]] = {}  # collection -> (timestamp, {doc_id: doc_data})
+
+# Image page listing cache - 10 minute TTL
+_IMAGE_LISTING_CACHE_TTL_SECONDS = 10 * 60
+_image_listing_cache: dict[str, tuple[float, list[str]]] = {}  # key -> (timestamp, images_list)
 
 # Hardcoded embedding model used for all queries (matches embedding service)
 _EMBEDDING_MODEL = "nomic-ai/nomic-embed-text-v1.5"
@@ -223,11 +269,17 @@ def _query_cache_get(key: str) -> tuple[bool, list | None]:
         del _query_cache[key]
         _query_cache_meta.pop(key, None)
         return False, None
+    # Move to end (most-recently-used)
+    _query_cache.move_to_end(key)
     return True, results
 
 
 def _query_cache_set(key: str, results: list, collection: str) -> None:
     """Store results in the cache with current timestamp."""
+    # Evict oldest entry if at capacity limit
+    if len(_query_cache) >= 1000:
+        oldest_key, _ = _query_cache.popitem(last=False)  # pop first (oldest)
+        _query_cache_meta.pop(oldest_key, None)
     _query_cache[key] = (time.time(), list(results))
     _query_cache_meta[key] = {"collection": collection}
 
@@ -408,39 +460,57 @@ def list_collections():
     return collections_info
 
 
-@app.delete("/api/cache/collections")
-def invalidate_collections_cache(collection: str = Query(default=None, description="Optional: invalidate only this collection")):
-    """Invalidate the collections metadata cache. Call after updating collection data."""
-    if collection:
-        if collection in _collections_cache:
-            del _collections_cache[collection]
-            logger.info(f"Cache invalidated for collection '{collection}'")
-            return {"status": "invalidated", "collection": collection}
+if not _DISABLE_ADMIN_ROUTES:
+    @app.delete("/api/cache/collections", include_schema_in_openapi=False)
+    def invalidate_collections_cache(collection: str = Query(default=None, description="Optional: invalidate only this collection")):
+        """Invalidate the collections metadata cache. Call after updating collection data."""
+        if _DISABLE_ADMIN_ROUTES:
+            raise HTTPException(status_code=404, detail="Not found")
+        if collection:
+            if collection in _collections_cache:
+                del _collections_cache[collection]
+                logger.info(f"Cache invalidated for collection '{collection}'")
+                return {"status": "invalidated", "collection": collection}
+            else:
+                return {"status": "not cached", "collection": collection}
         else:
-            return {"status": "not cached", "collection": collection}
-    else:
-        count = len(_collections_cache)
-        _collections_cache.clear()
-        logger.info(f"Cache invalidated for all {count} collections")
-        return {"status": "invalidated", "collection": None, "count": count}
+            count = len(_collections_cache)
+            _collections_cache.clear()
+            logger.info(f"Cache invalidated for all {count} collections")
+            return {"status": "invalidated", "collection": None, "count": count}
 
 
-@app.delete("/api/cache/query")
-def invalidate_query_cache(collection: str = Query(default=None, description="Optional: invalidate only this collection's query cache")):
-    """Invalidate the content-addressed query result cache. Call after pipelines F or G upsert data."""
-    if collection:
-        count = _query_cache_invalidate(collection)
-        logger.info(f"Query cache invalidated for collection '{collection}': {count} entries removed")
-        return {"status": "invalidated", "collection": collection, "count": count}
-    else:
-        count = len(_query_cache)
-        _query_cache.clear()
-        _query_cache_meta.clear()
-        logger.info(f"Query cache invalidated for all collections: {count} entries removed")
-        return {"status": "invalidated", "collection": None, "count": count}
+if not _DISABLE_ADMIN_ROUTES:
+    @app.delete("/api/cache/query", include_schema_in_openapi=False)
+    def invalidate_query_cache(collection: str = Query(default=None, description="Optional: invalidate only this collection's query cache")):
+        """Invalidate the content-addressed query result cache. Call after pipelines F or G upsert data."""
+        if _DISABLE_ADMIN_ROUTES:
+            raise HTTPException(status_code=404, detail="Not found")
+        if collection:
+            count = _query_cache_invalidate(collection)
+            logger.info(f"Query cache invalidated for collection '{collection}': {count} entries removed")
+            return {"status": "invalidated", "collection": collection, "count": count}
+        else:
+            count = len(_query_cache)
+            _query_cache.clear()
+            _query_cache_meta.clear()
+            logger.info(f"Query cache invalidated for all collections: {count} entries removed")
+            return {"status": "invalidated", "collection": None, "count": count}
 
 
-_REGISTRY_PATH = Path(os.environ.get("REGISTRY_PATH", "../data/registry.json"))
+if not _DISABLE_ADMIN_ROUTES:
+    @app.delete("/api/cache/images", include_schema_in_openapi=False)
+    def invalidate_image_cache():
+        """Invalidate the image listing cache. Call after image ingestion."""
+        if _DISABLE_ADMIN_ROUTES:
+            raise HTTPException(status_code=404, detail="Not found")
+        count = len(_image_listing_cache)
+        _image_listing_cache.clear()
+        logger.info(f"Image listing cache invalidated: {count} entries removed")
+        return {"status": "invalidated", "count": count}
+
+
+    _REGISTRY_PATH = Path(os.environ.get("REGISTRY_PATH", "./data/registry.json"))
 _COLLECTION_DESCRIPTIONS = {
     "army": "U.S. Army field manuals, doctrine publications, and operational guidance",
     "navy": "U.S. Navy tactical and operational publications",
@@ -640,254 +710,257 @@ def _require_admin_key(x_admin_key: str = Header(default="")):
         raise HTTPException(status_code=401, detail="Invalid admin key")
 
 
-@app.get("/api/admin/documents")
-def admin_list_documents(x_admin_key: str = Header(default="")):
-    """Return all documents from registry with chunk counts from Qdrant.
+if not _DISABLE_ADMIN_ROUTES:
+    @app.get("/api/admin/documents", include_schema_in_openapi=False)
+    def admin_list_documents(x_admin_key: str = Header(default="")):
+        """Return all documents from registry with chunk counts from Qdrant.
 
-    Requires X-Admin-Key header.
-    """
-    _require_admin_key(x_admin_key)
+        Requires X-Admin-Key header.
+        """
+        _require_admin_key(x_admin_key)
 
-    try:
-        with open(_REGISTRY_PATH) as f:
-            registry = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        logger.warning(f"Failed to read registry: {e}")
-        raise HTTPException(status_code=503, detail="Registry unavailable") from e
-
-    docs = registry.get("documents", [])
-    if isinstance(docs, dict):
-        doc_list = list(docs.values())
-    else:
-        doc_list = docs
-
-    # Single scroll per collection → doc_id → count  (O(collections) not O(docs*collections))
-    def scroll_counts(coll: str) -> dict[str, int]:
-        counts: dict[str, int] = {}
         try:
-            offset = None
-            while True:
-                records, offset = client.scroll(
-                    collection_name=coll, limit=1000, offset=offset,
-                    with_payload=["doc_id"]
-                )
-                for rec in records:
-                    did = rec.payload.get("doc_id") if rec.payload else None
-                    if did:
-                        counts[did] = counts.get(did, 0) + 1
-                if not offset:
-                    break
-        except (ApiException, Exception) as e:
-            logger.warning(f"Failed to scroll collection '{coll}' for chunk counts: {e}")
-        return counts
+            with open(_REGISTRY_PATH) as f:
+                registry = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.warning(f"Failed to read registry: {e}")
+            raise HTTPException(status_code=503, detail="Registry unavailable") from e
 
-    with ThreadPoolExecutor(max_workers=len(KNOWN_COLLECTIONS)) as ex:
-        futures = {ex.submit(scroll_counts, c): c for c in KNOWN_COLLECTIONS}
-        chunk_counts: dict[str, int] = {}
-        for f in as_completed(futures):
-            for did, cnt in f.result().items():
-                chunk_counts[did] = chunk_counts.get(did, 0) + cnt
-
-    result = []
-    for doc in doc_list:
-        doc_id = doc.get("doc_id", "")
-        result.append({
-            "doc_id": doc_id,
-            "title": doc.get("title") or doc.get("filename", "Untitled"),
-            "branch": doc.get("branch", "other"),
-            "category": doc.get("category", ""),
-            "pub_year": doc.get("pub_year"),
-            "page_count": doc.get("page_count"),
-            "status": doc.get("status", "unknown"),
-            "has_embeddings": doc.get("has_embeddings", False),
-            "embedding_status": doc.get("embedding_status", ""),
-            "chunk_count": chunk_counts.get(doc_id, -1),
-            "avg_chars_per_page": doc.get("avg_chars_per_page"),
-            "file_size_bytes": doc.get("file_size_bytes"),
-        })
-
-    return result
-
-
-@app.get("/api/admin/document/{doc_id}")
-def admin_get_document(doc_id: str, x_admin_key: str = Header(default="")):
-    """Return full document detail: all chunks + per-page image list.
-    
-    Searches all known collections in parallel for all chunks belonging to doc_id.
-    Requires X-Admin-Key header.
-    """
-    _require_admin_key(x_admin_key)
-
-    # Load registry for doc metadata
-    try:
-        with open(_REGISTRY_PATH) as f:
-            registry = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        logger.warning(f"Failed to read registry: {e}")
-        raise HTTPException(status_code=503, detail="Registry unavailable") from e
-
-    docs = registry.get("documents", [])
-    if isinstance(docs, dict):
-        doc_map = {d.get("doc_id"): d for d in docs.values()}
-    else:
-        doc_map = {d.get("doc_id"): d for d in docs}
-
-    doc_meta = doc_map.get(doc_id)
-    if not doc_meta:
-        raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not in registry")
-
-    # Collect all chunks from all collections in parallel
-    def scroll_chunks(collection_name: str) -> list[dict]:
-        try:
-            filter_cond = models.Filter(
-                must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))]
-            )
-            all_chunks = []
-            offset = None
-            while True:
-                records, offset = client.scroll(
-                    collection_name=collection_name,
-                    limit=1000,
-                    offset=offset,
-                    with_payload=True,
-                    scroll_filter=filter_cond,
-                )
-                for rec in records:
-                    p = dict(rec.payload) if rec.payload else {}
-                    all_chunks.append({
-                        "chunk_index": p.get("chunk_index"),
-                        "page_num": p.get("page_num"),
-                        "char_count": len(p.get("text", "")) if p.get("text") else 0,
-                        "text": (p.get("text", "") or "")[:5000],
-                        "vector_id": str(rec.id),
-                        "collection": collection_name,
-                    })
-                if not offset:
-                    break
-            return all_chunks
-        except (ApiException, Exception) as e:
-            logger.warning(f"Failed to scroll collection '{collection_name}' for doc '{doc_id}': {e}")
-            return []
-
-    with ThreadPoolExecutor(max_workers=len(KNOWN_COLLECTIONS)) as executor:
-        futures = {executor.submit(scroll_chunks, c): c for c in KNOWN_COLLECTIONS}
-        all_chunks = []
-        for future in as_completed(futures):
-            all_chunks.extend(future.result())
-
-    # Sort by page_num then chunk_index
-    all_chunks.sort(key=lambda c: (c.get("page_num") or 0, c.get("chunk_index") or 0))
-
-    # Build per-page image list (from filesystem)
-    import re as re_mod
-
-    image_dir = Path("../data/images") / doc_id
-    page_images: dict[int, list[str]] = {}
-    if image_dir.is_dir():
-        for fpath in image_dir.iterdir():
-            fname = fpath.name
-            # match page_XXXX_img_00.jb2  or page_XXXX_img_00.png etc.
-            m = re_mod.match(r"page_(\d+)_img_\d+", fname)
-            if m:
-                page_num = int(m.group(1))
-                if page_num not in page_images:
-                    page_images[page_num] = []
-                page_images[page_num].append(fname)
-        for pn in page_images:
-            page_images[pn].sort()
-
-    return {
-        "doc_id": doc_id,
-        "title": doc_meta.get("title") or doc_meta.get("filename", "Untitled"),
-        "branch": doc_meta.get("branch", "other"),
-        "category": doc_meta.get("category", ""),
-        "pub_year": doc_meta.get("pub_year"),
-        "page_count": doc_meta.get("page_count"),
-        "status": doc_meta.get("status", "unknown"),
-        "has_embeddings": doc_meta.get("has_embeddings", False),
-        "chunks": all_chunks,
-        "images": page_images,
-    }
-
-
-@app.delete("/api/admin/document/{doc_id}")
-def admin_delete_document(doc_id: str, x_admin_key: str = Header(default="")):
-    """Delete a document from Qdrant, registry.json, and image files.
-    
-    Requires X-Admin-Key header.
-    """
-    _require_admin_key(x_admin_key)
-
-    deleted_from: list[str] = []
-    errors: list[str] = []
-
-    # 1. Delete from all Qdrant collections
-    for coll in KNOWN_COLLECTIONS:
-        try:
-            filter_cond = models.Filter(
-                must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))]
-            )
-            result = client.delete(collection_name=coll, points_selector=filter_cond)
-            deleted_from.append(f"Qdrant/{coll}")
-            logger.info(f"Deleted doc '{doc_id}' from Qdrant collection '{coll}': {result}")
-        except (ApiException, Exception) as e:
-            err = f"Qdrant/{coll}: {e}"
-            logger.warning(f"Failed to delete doc '{doc_id}' from '{coll}': {e}")
-            errors.append(err)
-
-    # 2. Invalidate query cache for affected collections
-    for coll in _COLLECTION_DESCRIPTIONS:
-        try:
-            _query_cache_invalidate(coll)
-        except Exception:
-            pass
-    try:
-        _collections_cache.clear()
-    except Exception:
-        pass
-
-    # 3. Remove from registry.json
-    try:
-        with open(_REGISTRY_PATH) as f:
-            registry = json.load(f)
         docs = registry.get("documents", [])
         if isinstance(docs, dict):
-            registry["documents"] = {k: v for k, v in docs.items() if v.get("doc_id") != doc_id}
+            doc_list = list(docs.values())
         else:
-            registry["documents"] = [d for d in docs if d.get("doc_id") != doc_id]
-        with open(_REGISTRY_PATH, "w") as f:
-            json.dump(registry, f, indent=2)
-        deleted_from.append("registry.json")
-        logger.info(f"Removed doc '{doc_id}' from registry")
-    except (FileNotFoundError, json.JSONDecodeError, IOError) as e:
-        err = f"registry: {e}"
-        logger.warning(f"Failed to update registry for doc '{doc_id}': {e}")
-        errors.append(err)
+            doc_list = docs
 
-    # 4. Delete image directory
-    image_dir = Path("../data/images") / doc_id
-    if image_dir.is_dir():
-        import shutil
+        # Single scroll per collection → doc_id → count  (O(collections) not O(docs*collections))
+        def scroll_counts(coll: str) -> dict[str, int]:
+            counts: dict[str, int] = {}
+            try:
+                offset = None
+                while True:
+                    records, offset = client.scroll(
+                        collection_name=coll, limit=1000, offset=offset,
+                        with_payload=["doc_id"]
+                    )
+                    for rec in records:
+                        did = rec.payload.get("doc_id") if rec.payload else None
+                        if did:
+                            counts[did] = counts.get(did, 0) + 1
+                    if not offset:
+                        break
+            except (ApiException, Exception) as e:
+                logger.warning(f"Failed to scroll collection '{coll}' for chunk counts: {e}")
+            return counts
+
+        with ThreadPoolExecutor(max_workers=len(KNOWN_COLLECTIONS)) as ex:
+            futures = {ex.submit(scroll_counts, c): c for c in KNOWN_COLLECTIONS}
+            chunk_counts: dict[str, int] = {}
+            for f in as_completed(futures):
+                for did, cnt in f.result().items():
+                    chunk_counts[did] = chunk_counts.get(did, 0) + cnt
+
+        result = []
+        for doc in doc_list:
+            doc_id = doc.get("doc_id", "")
+            result.append({
+                "doc_id": doc_id,
+                "title": doc.get("title") or doc.get("filename", "Untitled"),
+                "branch": doc.get("branch", "other"),
+                "category": doc.get("category", ""),
+                "pub_year": doc.get("pub_year"),
+                "page_count": doc.get("page_count"),
+                "status": doc.get("status", "unknown"),
+                "has_embeddings": doc.get("has_embeddings", False),
+                "embedding_status": doc.get("embedding_status", ""),
+                "chunk_count": chunk_counts.get(doc_id, -1),
+                "avg_chars_per_page": doc.get("avg_chars_per_page"),
+                "file_size_bytes": doc.get("file_size_bytes"),
+            })
+
+        return result
+
+
+if not _DISABLE_ADMIN_ROUTES:
+    @app.get("/api/admin/document/{doc_id}", include_schema_in_openapi=False)
+    def admin_get_document(doc_id: str, x_admin_key: str = Header(default="")):
+        """Return full document detail: all chunks + per-page image list.
+    
+        Searches all known collections in parallel for all chunks belonging to doc_id.
+        Requires X-Admin-Key header.
+        """
+        _require_admin_key(x_admin_key)
+
+        # Load registry for doc metadata
         try:
-            shutil.rmtree(image_dir)
-            deleted_from.append(f"images/{doc_id}/")
-            logger.info(f"Deleted image directory for doc '{doc_id}'")
-        except OSError as e:
-            err = f"images: {e}"
-            logger.warning(f"Failed to delete image directory for doc '{doc_id}': {e}")
+            with open(_REGISTRY_PATH) as f:
+                registry = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.warning(f"Failed to read registry: {e}")
+            raise HTTPException(status_code=503, detail="Registry unavailable") from e
+
+        docs = registry.get("documents", [])
+        if isinstance(docs, dict):
+            doc_map = {d.get("doc_id"): d for d in docs.values()}
+        else:
+            doc_map = {d.get("doc_id"): d for d in docs}
+
+        doc_meta = doc_map.get(doc_id)
+        if not doc_meta:
+            raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not in registry")
+
+        # Collect all chunks from all collections in parallel
+        def scroll_chunks(collection_name: str) -> list[dict]:
+            try:
+                filter_cond = models.Filter(
+                    must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))]
+                )
+                all_chunks = []
+                offset = None
+                while True:
+                    records, offset = client.scroll(
+                        collection_name=collection_name,
+                        limit=1000,
+                        offset=offset,
+                        with_payload=True,
+                        scroll_filter=filter_cond,
+                    )
+                    for rec in records:
+                        p = dict(rec.payload) if rec.payload else {}
+                        all_chunks.append({
+                            "chunk_index": p.get("chunk_index"),
+                            "page_num": p.get("page_num"),
+                            "char_count": len(p.get("text", "")) if p.get("text") else 0,
+                            "text": (p.get("text", "") or "")[:5000],
+                            "vector_id": str(rec.id),
+                            "collection": collection_name,
+                        })
+                    if not offset:
+                        break
+                return all_chunks
+            except (ApiException, Exception) as e:
+                logger.warning(f"Failed to scroll collection '{collection_name}' for doc '{doc_id}': {e}")
+                return []
+
+        with ThreadPoolExecutor(max_workers=len(KNOWN_COLLECTIONS)) as executor:
+            futures = {executor.submit(scroll_chunks, c): c for c in KNOWN_COLLECTIONS}
+            all_chunks = []
+            for future in as_completed(futures):
+                all_chunks.extend(future.result())
+
+        # Sort by page_num then chunk_index
+        all_chunks.sort(key=lambda c: (c.get("page_num") or 0, c.get("chunk_index") or 0))
+
+        # Build per-page image list (from filesystem)
+        import re as re_mod
+
+        image_dir = Path("./data/images") / doc_id
+        page_images: dict[int, list[str]] = {}
+        if image_dir.is_dir():
+            for fpath in image_dir.iterdir():
+                fname = fpath.name
+                # match page_XXXX_img_00.jb2  or page_XXXX_img_00.png etc.
+                m = re_mod.match(r"page_(\d+)_img_\d+", fname)
+                if m:
+                    page_num = int(m.group(1))
+                    if page_num not in page_images:
+                        page_images[page_num] = []
+                    page_images[page_num].append(fname)
+            for pn in page_images:
+                page_images[pn].sort()
+
+        return {
+            "doc_id": doc_id,
+            "title": doc_meta.get("title") or doc_meta.get("filename", "Untitled"),
+            "branch": doc_meta.get("branch", "other"),
+            "category": doc_meta.get("category", ""),
+            "pub_year": doc_meta.get("pub_year"),
+            "page_count": doc_meta.get("page_count"),
+            "status": doc_meta.get("status", "unknown"),
+            "has_embeddings": doc_meta.get("has_embeddings", False),
+            "chunks": all_chunks,
+            "images": page_images,
+        }
+
+
+if not _DISABLE_ADMIN_ROUTES:
+    @app.delete("/api/admin/document/{doc_id}", include_schema_in_openapi=False)
+    def admin_delete_document(doc_id: str, x_admin_key: str = Header(default="")):
+        """Delete a document from Qdrant, registry.json, and image files.
+    
+        Requires X-Admin-Key header.
+        """
+        _require_admin_key(x_admin_key)
+
+        deleted_from: list[str] = []
+        errors: list[str] = []
+
+        # 1. Delete from all Qdrant collections
+        for coll in KNOWN_COLLECTIONS:
+            try:
+                filter_cond = models.Filter(
+                    must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))]
+                )
+                result = client.delete(collection_name=coll, points_selector=filter_cond)
+                deleted_from.append(f"Qdrant/{coll}")
+                logger.info(f"Deleted doc '{doc_id}' from Qdrant collection '{coll}': {result}")
+            except (ApiException, Exception) as e:
+                err = f"Qdrant/{coll}: {e}"
+                logger.warning(f"Failed to delete doc '{doc_id}' from '{coll}': {e}")
+                errors.append(err)
+
+        # 2. Invalidate query cache for affected collections
+        for coll in _COLLECTION_DESCRIPTIONS:
+            try:
+                _query_cache_invalidate(coll)
+            except Exception:
+                pass
+        try:
+            _collections_cache.clear()
+        except Exception:
+            pass
+
+        # 3. Remove from registry.json
+        try:
+            with open(_REGISTRY_PATH) as f:
+                registry = json.load(f)
+            docs = registry.get("documents", [])
+            if isinstance(docs, dict):
+                registry["documents"] = {k: v for k, v in docs.items() if v.get("doc_id") != doc_id}
+            else:
+                registry["documents"] = [d for d in docs if d.get("doc_id") != doc_id]
+            with open(_REGISTRY_PATH, "w") as f:
+                json.dump(registry, f, indent=2)
+            deleted_from.append("registry.json")
+            logger.info(f"Removed doc '{doc_id}' from registry")
+        except (FileNotFoundError, json.JSONDecodeError, IOError) as e:
+            err = f"registry: {e}"
+            logger.warning(f"Failed to update registry for doc '{doc_id}': {e}")
             errors.append(err)
-    else:
-        deleted_from.append("images/ (not found, skipped)")
 
-    if errors and not deleted_from:
-        raise HTTPException(status_code=500, detail=f"Delete failed: {'; '.join(errors)}")
+        # 4. Delete image directory
+        image_dir = Path("./data/images") / doc_id
+        if image_dir.is_dir():
+            import shutil
+            try:
+                shutil.rmtree(image_dir)
+                deleted_from.append(f"images/{doc_id}/")
+                logger.info(f"Deleted image directory for doc '{doc_id}'")
+            except OSError as e:
+                err = f"images: {e}"
+                logger.warning(f"Failed to delete image directory for doc '{doc_id}': {e}")
+                errors.append(err)
+        else:
+            deleted_from.append("images/ (not found, skipped)")
 
-    return {
-        "success": True,
-        "doc_id": doc_id,
-        "deleted_from": deleted_from,
-        "errors": errors if errors else None,
-    }
+        if errors and not deleted_from:
+            raise HTTPException(status_code=500, detail=f"Delete failed: {'; '.join(errors)}")
+
+        return {
+            "success": True,
+            "doc_id": doc_id,
+            "deleted_from": deleted_from,
+            "errors": errors if errors else None,
+        }
 
 
 @app.get("/api/context")
@@ -1155,6 +1228,23 @@ def list_images_for_page(doc_id: str, page_num: int):
     Returns:
         Dictionary with 'images' list containing image filenames for that page
     """
+    cache_key = f"{doc_id}:{page_num}"
+    
+    # Check cache first
+    if cache_key in _image_listing_cache:
+        stored_time, cached_images = _image_listing_cache[cache_key]
+        if time.time() - stored_time < _IMAGE_LISTING_CACHE_TTL_SECONDS:
+            logger.info(f"Image listing cache HIT for doc_id={doc_id} page_num={page_num}")
+            return {
+                "doc_id": doc_id,
+                "page_num": page_num,
+                "images": cached_images,
+                "count": len(cached_images)
+            }
+        else:
+            # Expired — remove it
+            del _image_listing_cache[cache_key]
+    
     doc_images_dir = os.path.join(IMAGES_DIR, doc_id)
     
     if not os.path.exists(doc_images_dir):
@@ -1170,6 +1260,9 @@ def list_images_for_page(doc_id: str, page_num: int):
                   if f.lower().startswith(page_prefix) 
                   and any(f.lower().endswith(ext) for ext in image_extensions)]
         images.sort()
+        
+        # Cache the successful result
+        _image_listing_cache[cache_key] = (time.time(), images)
         
         return {
             "doc_id": doc_id,
@@ -1379,7 +1472,7 @@ async def query(request: QueryRequest):
     # ── Log search query ────────────────────────────────────────────────────────
     try:
         import json
-        log_path = "../data/logs/search_queries.log"
+        log_path = ".../data/logs/search_queries.log"
         with open(log_path, "a") as lf:
             lf.write(json.dumps({
                 "ts": datetime.now(timezone.utc).isoformat() + "Z",
@@ -1618,7 +1711,7 @@ async def query_provable(request: QueryProvanableRequest):
     # ── Log search query ──────────────────────────────────────────────────────────
     try:
         import json
-        log_path = "../data/logs/search_queries.log"
+        log_path = ".../data/logs/search_queries.log"
         with open(log_path, "a") as lf:
             lf.write(json.dumps({
                 "ts": datetime.now(timezone.utc).isoformat() + "Z",
@@ -1979,19 +2072,87 @@ async def poll_kurier_status(job_id: str):
     }
 
 
-# ─── Source PDF Download Endpoints ─────────────────────────────────────────────
-# X402 paid download removed — these endpoints are stubs that return 501.
+# ─── X402 Paid Download Endpoints ─────────────────────────────────────────────
 
 @app.get("/api/source/{doc_id}/info")
 async def get_source_info(doc_id: str):
-    """Return document metadata. Stub — X402 paid download not available."""
-    raise HTTPException(status_code=501, detail="Paid download not available in this build")
+    """Return document metadata and price for paid PDF download."""
+    import json
+
+    registry_path = Path("./data/registry.json")
+    try:
+        with open(registry_path) as f:
+            registry = json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load registry: {e}")
+
+    docs = registry.get("documents", [])
+    doc = next((d for d in docs if d.get("doc_id") == doc_id), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    local_path = doc.get("local_path")
+    if not local_path or not Path(local_path).exists():
+        raise HTTPException(status_code=404, detail="Source PDF not found on server")
+
+    # Use the filename from the local_path as the download filename
+    filename = Path(local_path).name
+
+    price_micro_usdc = doc.get("price_micro_usdc", 10_000)
+
+    return {
+        "doc_id": doc_id,
+        "title": doc.get("title", doc_id),
+        "branch": doc.get("branch", "unknown"),
+        "filename": filename,
+        "price_usd": f"{price_micro_usdc / 1_000_000:.2f}",
+        "price_micro_usdc": price_micro_usdc,
+        "asset": USDC_CONTRACT,
+        "network": NETWORK_SPEC,
+        "scheme": "exact",
+        "pay_to": os.environ.get("PAID_DOWNLOAD_RECEIVING_ADDRESS", ""),
+        "max_timeout_seconds": 300,
+    }
 
 
 @app.get("/api/source/{doc_id}")
 async def get_source_pdf(doc_id: str, request: Request):
-    """Stream the source PDF. Stub — X402 paid download not available."""
-    raise HTTPException(status_code=501, detail="Paid download not available in this build")
+    """Stream the source PDF for a document, requiring X402 payment proof.
+
+    Without a Payment-Signature header: returns 402 with PAYMENT-REQUIRED.
+    With a valid EIP-3009 PaymentPayload: streams the PDF file.
+    """
+    # Extract the base64-encoded PaymentPayload from the X402 header
+    payment_sig = request.headers.get("Payment-Signature")
+
+    # Build the resource URL as seen by the client
+    resource_url = f"{request.base_url}api/source/{doc_id}"
+
+    should_stream, status_code, response_headers, result = verify_and_stream(
+        doc_id, payment_sig, resource_url
+    )
+
+    if status_code == 402:
+        raise HTTPException(
+            status_code=402,
+            detail=result,
+            headers={k: v for k, v in response_headers.items()},
+        )
+
+    if not should_stream or status_code != 200:
+        raise HTTPException(status_code=status_code, detail=result)
+
+    # result is the local file path
+    file_path = result
+    filename = Path(file_path).name
+
+    from starlette.responses import FileResponse
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type="application/pdf",
+        headers={k: v for k, v in response_headers.items()},
+    )
 
 
 if __name__ == "__main__":

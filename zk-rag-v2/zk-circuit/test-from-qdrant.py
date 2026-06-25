@@ -27,7 +27,7 @@ from pathlib import Path
 # Qdrant
 from qdrant_client import QdrantClient
 
-ZK_PROOFS_DIR = Path("../data/zk_proofs")
+ZK_PROOFS_DIR = Path("./data/zk_proofs")
 
 PROVE_BIN = os.environ.get(
     "PROVE_BIN",

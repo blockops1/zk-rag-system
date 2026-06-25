@@ -14,7 +14,7 @@
 set -euo pipefail
 
 ME=$(basename "$0")
-RAG_DIR="."
+RAG_DIR="./"
 VENV_PY="${RAG_DIR}/venv/bin/python3"
 
 if [ $# -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then

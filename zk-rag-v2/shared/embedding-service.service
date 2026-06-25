@@ -1,0 +1,21 @@
+[Unit]
+Description=Embedding Service — Qwen3-Embedding-0.6B
+After=network.target
+Wants=
+
+[Service]
+Type=simple
+User=blockops
+WorkingDirectory=./shared
+Environment=PYTHONPATH=./shared
+ExecStart=./venv/bin/python3 ./shared/embedding_service.py
+Restart=always
+RestartSec=5s
+# Hard memory ceiling — prevents OOM cascade on VPS
+# The embedding model + working memory fits comfortably in 8GB
+MemoryMax=8G
+StandardOutput=append:.../data/logs/embedding_service_stdout.log
+StandardError=append:.../data/logs/embedding_service_stderr.log
+
+[Install]
+WantedBy=multi-user.target

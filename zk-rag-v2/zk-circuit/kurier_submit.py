@@ -15,7 +15,7 @@ Environment:
 
 Output:
     Proof JSON is updated in-place with kurier_job_id and kurier_final_status.
-    Logs: ../data/logs/kurier_submit.log (structured JSON + stderr)
+    Logs: .../data/logs/kurier_submit.log (structured JSON + stderr)
 
 Kurier API base: https://api.kurier.xyz/api/v1
 """
@@ -33,8 +33,8 @@ from pathlib import Path
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
-ZK_PROOFS_DIR = Path("../data/zk_proofs")
-LOG_DIR = Path("../data/logs")
+ZK_PROOFS_DIR = Path("./data/zk_proofs")
+LOG_DIR = Path(".../data/logs")
 LOG_FILE = LOG_DIR / "kurier_submit.log"
 MAINNET_API_URL = "https://api.kurier.xyz/api/v1"
 TESTNET_API_URL = "https://testnet.kurier.xyz/api/v1"

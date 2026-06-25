@@ -22,10 +22,10 @@ import argparse
 import sys
 from pathlib import Path
 
-REGISTRY = Path("../data/registry.json")
-FAILED_ROOT = Path("../data/failed_pdfs")
-SOURCE_ROOT = Path("../data/sourcePDF")
-CHUNKS_ROOT = Path("../data/chunks")
+REGISTRY = Path("./data/registry.json")
+FAILED_ROOT = Path("./data/failed_pdfs")
+SOURCE_ROOT = Path("./data/sourcePDF")
+CHUNKS_ROOT = Path("./data/chunks")
 
 
 def get_cleanup_candidates(reg):

@@ -40,11 +40,11 @@ struct Cli {
     batch: bool,
 
     /// Directory containing chunk subdirectories (one per doc_id).
-    #[arg(long, default_value = "/data/military-documents/chunks")]
+    #[arg(long, default_value = "./data/chunks")]
     chunks_dir: PathBuf,
 
     /// Output directory for Merkle tree JSON files.
-    #[arg(long, default_value = "/data/military-documents/merkle_trees")]
+    #[arg(long, default_value = "./data/merkleTrees")]
     out_dir: PathBuf,
 
     /// Force re-build even if output already exists.

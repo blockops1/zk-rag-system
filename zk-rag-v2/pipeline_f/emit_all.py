@@ -2,7 +2,7 @@
 """
 emit_all.py -- Batch emit Merkle roots to MerkleRootRegistry V2 contract.
 
-Reads doc_ids from tree files in ../data/merkleTrees/, looks up
+Reads doc_ids from tree files in ./data/merkleTrees/, looks up
 merkle_root and pdf_hash from tree JSON / registry, calls AppendRootV2.s.sol,
 and writes emission records back to the registry.
 
@@ -40,8 +40,8 @@ from pathlib import Path
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-MERKLE_TREES_DIR = Path("../data/merkleTrees")
-REGISTRY_PATH    = Path("../data/registry.json")
+MERKLE_TREES_DIR = Path("./data/merkleTrees")
+REGISTRY_PATH    = Path("./data/registry.json")
 LOG_DIR          = Path("../data/logs")
 
 # Active network selection — read from .env ACTIVE_NETWORK (testnet | mainnet)
@@ -139,7 +139,7 @@ def load_registry() -> tuple[dict, dict]:
     return registry_data, doc_id_index
 
 
-LOCK_PATH = Path("../data/registry.lock")
+LOCK_PATH = Path("./data/registry.lock")
 
 def save_registry(registry_data: dict) -> None:
     """Atomically write registry with exclusive file lock to prevent concurrent writes."""

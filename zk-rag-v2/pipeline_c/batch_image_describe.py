@@ -8,8 +8,8 @@ Usage:
     python batch_image_describe.py --resume            # skip already-described pages
     python batch_image_describe.py --doc-id XXX       # single doc
 
-Output: Descriptions written to ../data/extracted/{doc_id}/pages/*.json
-Log: ../data/logs/pipeline_c_YYYYMMDD_HHMMSS.jsonl
+Output: Descriptions written to ./data/extracted/{doc_id}/pages/*.json
+Log: .../data/logs/pipeline_c_YYYYMMDD_HHMMSS.jsonl
 """
 
 from __future__ import annotations
@@ -31,9 +31,9 @@ from typing import Optional
 LLAMA_CLI = "/data/llama.cpp/build/bin/llama-mtmd-cli"
 MODEL_PATH = "/data/models/vision/smolVLM2-2.2B/SmolVLM2-2.2B-Instruct-Q4_K_M.gguf"
 MMPROJ_PATH = "/data/models/vision/smolVLM2-2.2B/mmproj-SmolVLM2-2.2B-Instruct-Q8_0.gguf"
-EXTRACTED_BASE = Path("../data/extracted")
-IMAGES_BASE = Path("../data/images")
-LOGS_DIR = Path("../data/logs")
+EXTRACTED_BASE = Path("./data/extracted")
+IMAGES_BASE = Path("./data/images")
+LOGS_DIR = Path(".../data/logs")
 SUBPROCESS_TIMEOUT = 300  # 5 min per image
 
 # Image size tiers for adaptive generation params: (max_size_kb, max_tokens, ctx_size)
@@ -129,7 +129,7 @@ def process_single_page(work: PageWork, threads: int) -> dict:
             break
 
     prompt = (
-        "Describe this document image briefly. "
+        "Describe this military document image briefly. "
         "Identify the visual type (photograph, map, chart, diagram, figure, flowchart, organizational chart, etc.) "
         "and summarize the key content in 1-3 sentences."
     )
@@ -365,7 +365,7 @@ def run_pipeline(workers: int, threads_per_worker: int, limit: int | None,
     log_path = LOGS_DIR / f"pipeline_c_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
 
     _jlog(sys.stdout, "INFO", "Pipeline C — SmolVLM2 image description")
-    _jlog(sys.stdout, "INFO", "  Output: ../data/extracted/")
+    _jlog(sys.stdout, "INFO", "  Output: ./data/extracted/")
     _jlog(sys.stdout, "INFO", f"  Workers: {workers} x {threads_per_worker} threads")
     _jlog(sys.stdout, "INFO", f"  Resume mode: {resume}")
     _jlog(sys.stdout, "INFO", f"  Log: {log_path}")

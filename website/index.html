@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Search Military Doctrine — ZK Provenance</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a2414;
+      color: #e0e0e0;
+      line-height: 1.6;
+      padding: 20px;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { color: #fff; margin-bottom: 10px; }
+    h1 a { color: inherit; text-decoration: none; }
+    h1 a:hover { text-decoration: underline; }
+    h2 { color: #fff; margin: 30px 0 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+    .hero { background: #243318; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    .hero p { color: #b0b0b0; }
+    table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #333; }
+    th { background: #243318; color: #fff; }
+    tr:hover { background: #1e2a14; }
+    code { background: #111a0e; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+    pre { background: #111a0e; padding: 15px; border-radius: 8px; overflow-x: auto; margin: 10px 0; }
+    pre code { background: none; padding: 0; }
+    .auth-methods { display: flex; gap: 20px; flex-wrap: wrap; }
+    .auth-card { flex: 1; min-width: 250px; background: #243318; padding: 15px; border-radius: 8px; }
+    .auth-card h3 { color: #fff; margin-bottom: 10px; }
+    .link-list { list-style: none; }
+    .link-list li { margin: 8px 0; }
+    .link-list a { color: #5a8a3c; text-decoration: none; }
+    .link-list a:hover { text-decoration: underline; }
+    footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #333; color: #888; font-size: 0.9em; }
+    footer a { color: #5a8a3c; }
+
+    /* Load more button */
+    .load-more-wrapper {
+      text-align: center;
+      margin: 24px 0;
+    }
+    .load-more-btn {
+      background: #243318;
+      color: #5a8a3c;
+      border: 1px solid #2a4a7a;
+      border-radius: 8px;
+      padding: 12px 32px;
+      font-size: 0.95em;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .load-more-btn:hover { background: #3a4a2a; }
+    .load-more-btn:disabled { opacity: 0.6; cursor: default; }
+
+    @media (max-width: 600px) {
+      body { padding: 10px; }
+      html { overflow-x: hidden; }
+      * { overflow-wrap: break-word; word-break: break-word; }
+      th, td { padding: 8px; font-size: 0.9em; }
+      .auth-methods { flex-direction: column; }
+      .auth-card { min-width: 0; }
+      .search-box { flex-direction: column; }
+      .nav-buttons { flex-wrap: wrap; }
+      .passage-links { flex-direction: column; }
+    }
+
+    /* Search UI styles */
+    .search-section { background: #243318; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    .search-box { display: flex; gap: 10px; margin-bottom: 15px; }
+    .search-box input {
+      flex: 1;
+      padding: 12px 15px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #111a0e;
+      color: #e0e0e0;
+      font-size: 16px;
+    }
+    .search-box input:focus { outline: none; border-color: #5a8a3c; }
+    .search-box button {
+      padding: 12px 24px;
+      background: #5a8a3c;
+      color: #1a2414;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .search-box button:hover { background: #7ab85a; }
+    .search-box button:disabled { background: #555; cursor: not-allowed; }
+    .collection-search-box select {
+      background: #111a0e;
+      color: #e0e0e0;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 0.95em;
+      font-family: inherit;
+      cursor: pointer;
+      min-width: 130px;
+    }
+    .collection-search-box select:focus { outline: none; border-color: #5a8a3c; }
+    #searchProvenanceBtn { background: #f0a500; color: #1a2414; }
+    #searchProvenanceBtn:hover { background: #d4940a; }
+    #collectionSearchProvenanceBtn { background: #f0a500; color: #1a2414; }
+    #collectionSearchProvenanceBtn:hover { background: #d4940a; }
+    .results-section { margin-top: 20px; }
+    .results-header { color: #fff; margin-bottom: 15px; font-size: 1.1em; }
+    .document-header {
+      background: #243318;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      border-left: 3px solid #5a8a3c;
+    }
+    .document-title { color: #fff; font-weight: 600; font-size: 1.1em; margin-bottom: 8px; }
+    .document-title .doc-title-link { color: #93c5fd; text-decoration: none; }
+    .document-title .doc-title-link:hover { color: #bfdbfe; text-decoration: underline; }
+    .document-summary { color: #888; font-size: 0.85em; }
+    .passage-card {
+      background: #111a0e;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      border-left: 3px solid #7ab85a;
+    }
+    .passage-page { color: #5a8a3c; font-size: 0.85em; margin-bottom: 8px; }
+    .passage-excerpt { color: #b0b0b0; font-size: 0.95em; margin-bottom: 10px; }
+    .passage-links { display: flex; gap: 15px; flex-wrap: wrap; }
+    .passage-link { color: #5a8a3c; text-decoration: none; font-size: 0.9em; }
+    .passage-link:hover { text-decoration: underline; }
+    .doc-scoped-banner {
+      background: #243318;
+      border: 1px solid #2a4a8a;
+      border-radius: 6px;
+      padding: 10px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9em;
+    }
+    .doc-scoped-banner span { color: #b0b0b0; }
+    .doc-scoped-banner a { color: #5a8a3c; text-decoration: none; }
+    .doc-scoped-banner a:hover { text-decoration: underline; }
+    /* Search-bar scope label (shown below search box after a search) */
+    .search-scope-label {
+      color: #888;
+      font-size: 0.85em;
+      margin-bottom: 12px;
+      padding: 6px 10px;
+      background: #111a0e;
+      border: 1px solid #3a4a2a;
+      border-radius: 4px;
+      display: inline-block;
+    }
+    /* Results-area scope banner (shown above results) */
+    .results-scope-banner {
+      background: #111a0e;
+      border: 1px solid #2a4a8a;
+      border-radius: 6px;
+      padding: 10px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9em;
+    }
+    .results-scope-icon { font-size: 1.1em; }
+    .results-scope-text { color: #b0b0b0; }
+    .results-scope-text strong { color: #e0e0e0; }
+    /* Source PDF download button */
+    .download-pdf-btn {
+      background: #2a5a3a;
+      color: #4ade80;
+      border: 1px solid #3a7a4a;
+      border-radius: 4px;
+      padding: 5px 12px;
+      font-size: 0.85em;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    .download-pdf-btn:hover { background: #3a6a4a; }
+    .download-pdf-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .download-pdf-btn.loading { opacity: 0.7; cursor: wait; }
+    /* Hide button for injected chunks */
+    .result-score { color: #888; font-size: 0.85em; margin-bottom: 5px; }
+    .result-title { color: #fff; font-weight: 600; margin-bottom: 8px; }
+    .result-metadata { color: #888; font-size: 0.85em; margin-bottom: 8px; }
+    .result-excerpt { color: #b0b0b0; font-size: 0.95em; margin-bottom: 10px; }
+    .result-link { color: #5a8a3c; text-decoration: none; font-size: 0.9em; }
+    .result-link:hover { text-decoration: underline; }
+    .doc-id-display { color: #666; font-size: 0.8em; cursor: default; }
+    .loading { text-align: center; padding: 20px; color: #888; }
+    .error { background: #3a1a1a; border-left-color: #ff6b6b; padding: 15px; border-radius: 6px; color: #ff8a8a; }
+    .catalog-link { margin-top: 15px; }
+    .catalog-link a { color: #5a8a3c; text-decoration: none; }
+    .catalog-link a:hover { text-decoration: underline; }
+    .catalog-section { background: #243318; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    .catalog-section h2 { margin: 0 0 8px 0; font-size: 1.25em; }
+    .catalog-section p { margin: 0 0 14px 0; color: #a0a0a0; font-size: 0.9em; }
+    .catalog-link-box a { display: inline-block; background: #1a3a5c; color: #5a8a3c; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 500; border: 1px solid #2a5a8c; }
+    .catalog-link-box a:hover { background: #1f4a70; text-decoration: none; }
+    /* Navigation button styles */
+    .nav-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .nav-btn {
+      background: #243318;
+      color: #5a8a3c;
+      border: 1px solid #333;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .nav-btn:hover:not(:disabled) { background: #1f2a4a; text-decoration: none; }
+    .nav-btn:disabled {
+      color: #555;
+      border-color: #333;
+      cursor: not-allowed;
+    }
+    /* Prev/Next chunk nav buttons */
+    .chunk-nav-btn {
+      background: #243318;
+      color: #5a8a3c;
+      border: 1px solid #333;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      cursor: pointer;
+    }
+    .chunk-nav-btn:hover:not(:disabled) { background: #1f2a4a; }
+    .chunk-nav-btn:disabled {
+      color: #555;
+      border-color: #333;
+      cursor: not-allowed;
+    }
+    .chunk-nav-btn.provenance {
+      color: #f0a500;
+      border-color: #f0a500;
+    }
+    .chunk-nav-btn.provenance:hover:not(:disabled) { background: #2a2a1a; }
+    /* Hide button for injected chunks */
+    .hide-chunk-btn {
+      background: none;
+      border: none;
+      color: #888;
+      cursor: pointer;
+      font-size: 0.85em;
+      padding: 4px 8px;
+      border-radius: 4px;
+      margin-top: 8px;
+    }
+    .hide-chunk-btn:hover { background: #1f2a4a; color: #e0e0e0; }
+    /* Inline image styles */
+    .doc-image {
+      max-width: 100%;
+      margin: 8px 0;
+      border-radius: 4px;
+    }
+    /* Provenance Prove button */
+    .prove-btn {
+      background: #5a8a3c;
+      color: #1a2414;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .prove-btn:hover { background: #7ab85a; }
+    .prove-btn:disabled { background: #555; cursor: not-allowed; }
+    /* Provenance modal */
+    .provenances-modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .provenances-modal {
+      background: #243318;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 25px;
+      max-width: 500px;
+      width: 90%;
+      position: relative;
+    }
+    .provenances-modal h3 {
+      color: #fff;
+      margin-bottom: 15px;
+      font-size: 1.05em;
+    }
+    .provenances-modal .modal-close {
+      position: absolute;
+      top: 12px; right: 15px;
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 1.2em;
+      cursor: pointer;
+    }
+    .provenances-modal .modal-close:hover { color: #e0e0e0; }
+    .provenances-modal .modal-body {
+      color: #b0b0b0;
+      font-size: 0.95em;
+      min-height: 40px;
+    }
+    .provenances-links {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .provenances-links a {
+      color: #5a8a3c;
+      text-decoration: none;
+      font-size: 0.9em;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .provenances-links a:hover { text-decoration: underline; }
+    .provenances-links a.disabled {
+      color: #555;
+      pointer-events: none;
+    }
+    .provenances-error {
+      color: #ff8a8a;
+      background: #3a1a1a;
+      padding: 12px;
+      border-radius: 6px;
+      border-left: 3px solid #ff6b6b;
+    }
+    /* Decode modal */
+    .decode-modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1100;
+    }
+    .decode-modal {
+      background: #243318;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 25px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    .decode-modal h3 {
+      color: #fff;
+      margin-bottom: 15px;
+      font-size: 1.05em;
+    }
+    .decode-modal .modal-close {
+      position: absolute;
+      top: 12px; right: 15px;
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 1.2em;
+      cursor: pointer;
+    }
+    .decode-modal .modal-close:hover { color: #e0e0e0; }
+    .decode-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 15px 0;
+      font-size: 0.9em;
+    }
+    .decode-table th {
+      background: #111a0e;
+      color: #5a8a3c;
+      padding: 8px 12px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }
+    .decode-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #2a2a3a;
+      color: #b0b0b0;
+      vertical-align: top;
+    }
+    .decode-table td:first-child {
+      color: #5a8a3c;
+      font-family: monospace;
+      white-space: nowrap;
+    }
+    .decode-table td:nth-child(2) {
+      color: #888;
+      font-size: 0.85em;
+    }
+    .decode-table td:last-child {
+      color: #e0e0e0;
+    }
+    .decode-hash {
+      font-family: monospace;
+      font-size: 0.85em;
+      word-break: break-all;
+      color: #aaa;
+    }
+    .decode-truncated {
+      font-family: monospace;
+      font-size: 0.85em;
+      color: #aaa;
+      cursor: pointer;
+    }
+    .decode-section-title {
+      color: #fff;
+      font-size: 0.95em;
+      font-weight: 600;
+      margin: 15px 0 8px;
+    }
+    .decode-success {
+      color: #4ade80;
+      background: #1a3a2a;
+      padding: 10px 14px;
+      border-radius: 6px;
+      border-left: 3px solid #4ade80;
+      margin-bottom: 15px;
+    }
+    .decode-error {
+      color: #ff8a8a;
+      background: #3a1a1a;
+      padding: 10px 14px;
+      border-radius: 6px;
+      border-left: 3px solid #ff6b6b;
+    }
+    /* ZK Status badge (inline on passage card) */
+    .zk-status-badge {
+      color: #888;
+      font-size: 0.9em;
+      cursor: pointer;
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      transition: color 0.2s, background 0.2s;
+    }
+    .zk-status-badge:hover { background: #1f2f4f; color: #5a8a3c; }
+    .zk-status-badge.verified { color: #4ade80; cursor: pointer; }
+    .zk-status-badge.failed { color: #ff8a8a; cursor: pointer; }
+
+    /* Download proof link */
+    .zk-download-btn { color: #5a8a3c; text-decoration: none; font-size: 0.9em; }
+    .zk-download-btn:hover { text-decoration: underline; }
+
+    /* How it works footer */
+    #howItWorksSection {
+      margin-top: 40px;
+      padding: 24px;
+      background: #243318;
+      border-radius: 8px;
+      border-top: 3px solid #5a8a3c;
+    }
+    #howItWorksSection h3 { color: #fff; margin-bottom: 12px; }
+    #howItWorksSection p { color: #b0b0b0; font-size: 0.9em; line-height: 1.7; }
+    #howItWorksSection ol { color: #888; font-size: 0.88em; line-height: 2; padding-left: 20px; margin-top: 10px; }
+    #howItWorksSection strong { color: #b0b0b0; }
+    #howItWorksSection a { color: #5a8a3c; }
+
+    .demo-label {
+      display: inline-block;
+      background: #243318;
+      color: #5a8a3c;
+      border: 1px solid #2a4a7a;
+      border-radius: 4px;
+      padding: 3px 10px;
+      font-size: 0.8em;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .value-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 20px 0;
+    }
+    @media (max-width: 600px) {
+      .value-grid { grid-template-columns: 1fr; }
+    }
+    .value-card {
+      background: #243318;
+      border: 1px solid #3a4a2a;
+      border-radius: 8px;
+      padding: 18px;
+    }
+    .value-card h3 { color: #fff; margin-bottom: 8px; font-size: 1em; }
+    .value-card p { color: #888; font-size: 0.88em; line-height: 1.5; }
+    .cta-section {
+      background: #0f1e3a;
+      border: 1px solid #1e3a6a;
+      border-radius: 8px;
+      padding: 28px;
+      margin: 30px 0;
+      text-align: center;
+    }
+    .cta-section h2 { color: #fff; border: none; margin: 0 0 8px; padding: 0; }
+    .cta-section p { color: #888; margin-bottom: 20px; font-size: 0.95em; }
+    .cta-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      background: #5a8a3c;
+      color: #1a2414;
+      border: none;
+      border-radius: 6px;
+      padding: 12px 28px;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn-primary:hover { background: #7ab85a; text-decoration: none; }
+    .btn-secondary {
+      background: transparent;
+      color: #5a8a3c;
+      border: 1px solid #2a4a7a;
+      border-radius: 6px;
+      padding: 12px 28px;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn-secondary:hover { background: #243318; text-decoration: none; }
+    .contact-bar {
+      background: #243318;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9em;
+    }
+    .contact-bar span { color: #888; }
+    .contact-bar a { color: #5a8a3c; text-decoration: none; }
+    .contact-bar a:hover { text-decoration: underline; }
+    .how-it-works-step {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+      align-items: flex-start;
+    }
+    .step-num {
+      background: #243318;
+      color: #5a8a3c;
+      border-radius: 50%;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85em;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .step-body strong { color: #e0e0e0; display: block; margin-bottom: 2px; }
+    .step-body { color: #888; font-size: 0.88em; line-height: 1.5; }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: #0f1e3a;
+      border: 1px solid #1e3a6a;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      font-size: 0.88em;
+      flex-wrap: wrap;
+    }
+    .stat-item { color: #888; }
+    .stat-num { color: #5a8a3c; font-weight: 700; }
+    .stat-sep { color: #444; }
+
+  
+    /* ── Hero redesign ───────────────────────────────────────── */
+    .hero-wrap {
+      position: relative;
+      background: #111a0a;
+      overflow: hidden;
+      margin-bottom: 32px;
+      border-bottom: 2px solid #2a3a1a;
+    }
+    .hero-bg-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.25;
+      filter: saturate(0.6);
+    }
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        160deg,
+        rgba(17,26,10,0.85) 0%,
+        rgba(17,26,10,0.6) 50%,
+        rgba(17,26,10,0.9) 100%
+      );
+    }
+    .hero-wrap .container { position: relative; z-index: 1; }
+    .hero-wrap .stats-bar {
+      display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+      padding: 10px 0 0; font-size: 0.8em; color: #6a8a5a;
+    }
+    .hero-wrap .stats-bar .stat-sep { color: #3a5a2a; }
+    .hero-text { padding: 48px 0 28px; text-align: center; }
+    .hero-text h1 {
+      color: #fff; font-size: clamp(1.6em, 4vw, 2.6em);
+      font-weight: 800; line-height: 1.2;
+      letter-spacing: -0.02em; margin-bottom: 16px;
+    }
+    .hero-sub {
+      color: #a0c090; font-size: clamp(0.9em, 2vw, 1.1em);
+      line-height: 1.7; max-width: 580px; margin: 0 auto;
+    }
+    /* Hero search */
+    .hero-search-wrap { padding: 0 0 28px; }
+    .hero-search-box {
+      display: flex; gap: 8px; max-width: 700px; margin: 0 auto;
+    }
+    .hero-search-box input {
+      flex: 1; padding: 14px 18px;
+      border: 1px solid #3a5a2a; border-radius: 6px;
+      background: rgba(17,26,10,0.9); color: #e0e0e0;
+      font-size: 1em; min-width: 0;
+    }
+    .hero-search-box input:focus { outline: none; border-color: #5a8a3c; }
+    .hero-search-box input::placeholder { color: #5a7a4a; }
+    .btn-search {
+      padding: 14px 24px; background: #5a8a3c; color: #1a2414;
+      border: none; border-radius: 6px; font-size: 1em;
+      font-weight: 700; cursor: pointer; white-space: nowrap;
+    }
+    .btn-search:hover { background: #7ab85a; }
+    .btn-provenance {
+      padding: 14px 24px; background: #c8a830; color: #1a2414;
+      border: none; border-radius: 6px; font-size: 1em;
+      font-weight: 700; cursor: pointer; white-space: nowrap;
+    }
+    .btn-provenance:hover { background: #d4b840; }
+    /* Prompt cards */
+    .prompt-cards {
+      display: flex; gap: 10px; flex-wrap: wrap;
+      justify-content: center; padding: 0 0 36px;
+    }
+    .prompt-card {
+      display: flex; align-items: center; gap: 7px;
+      background: rgba(36,51,24,0.85); border: 1px solid #3a5a2a;
+      border-radius: 20px; padding: 7px 14px;
+      font-size: 0.82em; color: #a0c090; cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .prompt-card:hover { background: rgba(50,70,32,0.9); border-color: #5a8a3c; color: #c8e0b0; }
+    .prompt-icon { font-size: 1em; }
+
+    /* ── Why This Matters ────────────────────────────────────── */
+    .why-section { padding: 8px 0 32px; }
+    .why-title { color: #fff; margin-bottom: 20px; font-size: 1.3em; }
+    .why-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    @media (max-width: 680px) { .why-grid { grid-template-columns: 1fr; } }
+    .why-card {
+      background: #243318; border: 1px solid #2a3a1a;
+      border-radius: 8px; padding: 20px;
+      display: flex; gap: 14px; align-items: flex-start;
+    }
+    .why-icon { font-size: 1.8em; flex-shrink: 0; line-height: 1.2; }
+    .why-card h3 { color: #fff; font-size: 0.92em; margin-bottom: 6px; }
+    .why-card p { color: #888; font-size: 0.84em; line-height: 1.55; }
+
+    /* ── Search hint ────────────────────────────────────────── */
+    .search-hint { color: #6a8a5a; font-size: 0.88em; margin-bottom: 14px; }
+
+    </style>
+</head>
+<body>
+  <div class="container">
+    <div class="demo-label">Live Demo — ZK-Proven</div>
+    <h1><a href="/">Search Military Doctrine</a></h1>
+
+<body>
+
+<!-- ═══ HERO ══════════════════════════════════════════════════════════════ -->
+<div class="hero-wrap">
+  <!-- IMAGE: Replace src with uploaded image file -->
+  <img class="hero-bg-img" src="/images/hero-soldier.jpg" alt="" aria-hidden="true" onerror="this.style.display='none'">
+  <div class="hero-overlay"></div>
+
+  <div class="container">
+    <!-- Live stats bar -->
+    <div class="stats-bar">
+      <span class="stat-item">
+        <span class="stat-num" id="stat-docs">—</span> documents indexed
+      </span>
+      <span class="stat-sep">·</span>
+      <span class="stat-item">
+        <span class="stat-num" id="stat-chunks">—</span> chunks
+      </span>
+      <span class="stat-sep">·</span>
+      <span class="stat-item">
+        <span class="stat-num" id="stat-collections">—</span> collections
+      </span>
+      <span class="stat-sep">·</span>
+      <span class="stat-item">
+        ZK proof verified by zkVerify
+      </span>
+    </div>
+    <script>
+    (async function() {
+      try {
+        const r = await fetch('/api/collections');
+        const data = await r.json();
+        const docs = data.reduce((s, c) => s + c.doc_count, 0);
+        const chunks = data.reduce((s, c) => s + c.chunk_count, 0);
+        document.getElementById('stat-docs').textContent = docs.toLocaleString();
+        document.getElementById('stat-chunks').textContent = chunks.toLocaleString();
+        document.getElementById('stat-collections').textContent = data.length;
+      } catch(e) {
+        document.querySelector('.stats-bar').style.display = 'none';
+      }
+    })();
+    </script>
+
+    <!-- Hero text -->
+    <div class="hero-text">
+      <h1>Ask Any Military Question.<br>Get Answers You Can Actually Trust.</h1>
+      <p class="hero-sub">
+        Real US Army, Navy, Marine Corps, and Air Force doctrine.<br>
+        AI-powered answers with cryptographic proof on blockchain — no hallucinations, no trust required.
+      </p>
+    </div>
+
+    <!-- Hero search bar — prominent, in-page -->
+    <div class="hero-search-wrap">
+      <div class="hero-search-box">
+        <input
+          type="text"
+          id="heroSearchInput"
+          placeholder="How do I conduct urban operations?"
+          autocomplete="off"
+        >
+        <button id="heroSearchBtn" class="btn-search">Search</button>
+        <button id="heroSearchProvenanceBtn" class="btn-provenance">Search with Provenance →</button>
+      </div>
+    </div>
+
+    <!-- Prompt cards -->
+    <div class="prompt-cards">
+      <div class="prompt-card" data-query="Best practices for clearing a building">
+        <span class="prompt-icon">🏠</span>
+        <span>Best practices for clearing a building</span>
+      </div>
+      <div class="prompt-card" data-query="FM 3-0 vs urban operations — what's different?">
+        <span class="prompt-icon">📘</span>
+        <span>FM 3-0 vs urban operations — what's different?</span>
+      </div>
+      <div class="prompt-card" data-query="Leadership principles from FM 6-22">
+        <span class="prompt-icon">🎖️</span>
+        <span>Leadership principles from FM 6-22</span>
+      </div>
+      <div class="prompt-card" data-query="Logistics in contested environments">
+        <span class="prompt-icon">🚁</span>
+        <span>Logistics in contested environments</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ WHY THIS MATTERS ══════════════════════════════════════════════════ -->
+<div class="container">
+  <div class="why-section">
+    <h2 class="why-title">Why This Matters</h2>
+    <div class="why-grid">
+      <div class="why-card">
+        <div class="why-icon">🛡️</div>
+        <div>
+          <h3>For Soldiers &amp; Planners</h3>
+          <p>Get doctrine in seconds during planning or ops — with cryptographic proof no one doctored the output.</p>
+        </div>
+      </div>
+      <div class="why-card">
+        <div class="why-icon">📡</div>
+        <div>
+          <h3>For Analysts &amp; Trainers</h3>
+          <p>Train teams on real field manuals without digging through PDFs. Every answer links directly to the source.</p>
+        </div>
+      </div>
+      <div class="why-card">
+        <div class="why-icon">🔧</div>
+        <div>
+          <h3>For Developers &amp; AI Builders</h3>
+          <p>Build agents that cite sources cryptographically. Never get called out on fake citations again.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Browse catalog -->
+  <div class="catalog-section">
+    <h2>📂 Browse the Full Document Catalog</h2>
+    <p>See what documents are in the live corpus — titles, sources, and descriptions. 525,000+ pages of official military doctrine, indexed and searchable.</p>
+    <div class="catalog-link-box">
+      <a href="/catalog.html">Browse the catalog →</a>
+    </div>
+  </div>
+
+  <!-- API reference -->
+  <div class="catalog-section">
+    <h2>📡 API Reference</h2>
+    <p>Build with the API — agents use the REST interface, humans browse the interactive docs below.</p>
+    <div class="catalog-link-box">
+      <a href="/docs.html" target="_blank">Swagger UI — interactive API reference ↗</a>
+      &nbsp;
+      <a href="/api/openapi.json" target="_blank">OpenAPI spec ↗</a>
+    </div>
+  </div>
+
+  <!-- Search Section 1: Full Corpus -->
+  <div class="search-section">
+    <h2>🔎 Search the Document Corpus</h2>
+    <p class="search-hint">Ask a military question — try one of the examples above, or type your own below.</p>
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="e.g. How do I set up a defensive position?">
+      <button id="searchBtn">Search</button>
+      <button id="searchProvenanceBtn">Search with Provenance</button>
+    </div>
+    <div id="searchScopeLabel" class="search-scope-label" style="display:none;"></div>
+  </div>
+
+  <!-- Search Section 2: Within Collection -->
+  <div class="search-section">
+    <h2>📁 Search Within Collection</h2>
+    <div class="search-box collection-search-box">
+      <select id="collectionSelect">
+        <option value="army">Army</option>
+        <option value="navy">Navy</option>
+        <option value="marines">Marines</option>
+        <option value="coast_guard">Coast Guard</option>
+        <option value="air_force">Air Force</option>
+        <option value="other">Other</option>
+      </select>
+      <input type="text" id="collectionSearchInput" placeholder="Search within collection…">
+      <button id="collectionSearchBtn">Search</button>
+      <button id="collectionSearchProvenanceBtn">Search with Provenance</button>
+    </div>
+    <div id="collectionScopeLabel" class="search-scope-label" style="display:none;"></div>
+  </div>
+
+  <!-- Results (shared by both searches) -->
+  <div id="resultsContainer" class="results-section"></div>
+
+  <!-- Collections table -->
+  <h2>Collections</h2>
+  <table id="collectionsTable">
+    <thead>
+      <tr>
+        <th>Collection</th>
+        <th>Description</th>
+        <th>Documents</th>
+      </tr>
+    </thead>
+    <tbody id="collectionsBody">
+      <tr><td colspan="3"><em>Loading…</em></td></tr>
+    </tbody>
+  </table>
+
+  <script>
+  (function() {
+    fetch('/api/collections')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const tbody = document.getElementById('collectionsBody');
+        tbody.innerHTML = '';
+        const collections = Array.isArray(data) ? data : (data.collections || []);
+        collections.forEach(col => {
+          const tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td><code>' + col.name + '</code></td>' +
+            '<td>' + (col.description || '—') + '</td>' +
+            '<td>' + (typeof col.doc_count === 'number' ? col.doc_count.toLocaleString() : '—') + '</td>';
+          tbody.appendChild(tr);
+        });
+      })
+      .catch(() => {});
+  })();
+  </script>
+
+  <!-- API example -->
+  <h2>API Example: Query with Metadata Filtering</h2>
+  <pre><code>curl -X POST https://militarymanuals.ai/api/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer *** \
+  -d '{
+    "collection": "army",
+    "query": "How do I conduct urban operations?",
+    "metadata_filter": {
+      "category": "field-manual",
+      "classification": "unclassified"
+    }
+  }'</code></pre>
+
+  <!-- Discovery links -->
+  <h2>Discovery</h2>
+  <ul class="link-list">
+    <li><a href="/llms.txt">/llms.txt</a> — Structured API description for LLM agents</li>
+    <li><a href="/api/manifest">/api/manifest</a> — OpenAPI-compatible API manifest</li>
+    <li><a href="/api/collections">/api/collections</a> — List all available collections</li>
+  </ul>
+
+  <!-- Value prop -->
+  <div class="value-grid">
+    <div class="value-card">
+      <h3>🛡️ Trusted Answers for High-Stakes Decisions</h3>
+      <p>In the field, in the TOC, in training — you need fast answers you can trust. Every result here is drawn from official US military publications and carries a ZK proof that ties it back to the blockchain. No AI confabulation. No "looks right." Provable.</p>
+    </div>
+    <div class="value-card">
+      <h3>🔗 For AI Builders: Agents That Never Fabricate</h3>
+      <p>Build AI systems that cite their sources with cryptographic certainty. Every answer can come with a ZK proof that it was drawn from the committed corpus, not fabricated. Perfect for intelligence tools, training platforms, and operational aids.</p>
+    </div>
+  </div>
+
+  <!-- Built With -->
+  <div class="links-section">
+    <h3>Built With</h3>
+    <div class="links-grid">
+      <div>
+        <span class="link-tag">Horizen</span><br>
+        <a href="https://horizen.io/" target="_blank">Horizen ↗</a>
+      </div>
+      <div>
+        <span class="link-tag">Smart Contract</span><br>
+        <a href="https://explorer.horizen.io/address/0x077467A27C70Fb47a6E9Fdd8B3C3F0C1Db869150" target="_blank">Contract on Explorer ↗</a>
+      </div>
+      <div>
+        <span class="link-tag">Kurier</span><br>
+        <a href="https://kurier.xyz" target="_blank">Kurier.xyz ↗</a>
+      </div>
+      <div>
+        <span class="link-tag">zkVerify</span><br>
+        <a href="https://zkverify.io" target="_blank">zkVerify ↗</a>
+      </div>
+      <div>
+        <span class="link-tag">Proof Type</span><br>
+        <a href="https://github.com/blockops1/zk-prover-verifier-plonky2" target="_blank">Plonky2 + Poseidon ↗</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Open source CTA -->
+  <div class="cta-section">
+    <h2>Run this for your own corpus</h2>
+    <p>
+      The full open-source implementation is available on GitHub — pipelines, ZK circuits, smart contracts, and frontend all included.
+      Built on Horizen EVM and zkVerify.
+    </p>
+    <div class="cta-buttons">
+      <a href="https://github.com/blockops1/zk-rag-system" class="btn-primary" target="_blank">
+        View on GitHub
+      </a>
+      <a href="https://zkverify.io" class="btn-secondary" target="_blank">
+        Learn About zkVerify
+      </a>
+    </div>
+  </div>
+
+  <!-- How it works -->
+  <div id="howItWorksSection">
+    <h3>🔗 How It Works — ZK-RAG</h3>
+    <p>
+      <strong>ZK-RAG</strong> (<em>Zero-Knowledge Retrieval-Augmented Generation</em>) combines semantic search with cryptographic proofs so every result can be independently verified without revealing the underlying documents.
+      Every passage in these search results is anchored to the Horizen blockchain at the time documents are registered.
+      The ZK circuit proves the following <em>without revealing the full document</em>:
+    </p>
+    <div class="how-it-works-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Poseidon Hash</strong>
+        The passage text is hashed using the Poseidon function into a leaf hash.
+      </div>
+    </div>
+    <div class="how-it-works-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Merkle Proof</strong>
+        The circuit proves this leaf is a member of the Merkle tree for this document.
+      </div>
+    </div>
+    <div class="how-it-works-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Chain Anchor</strong>
+        The Merkle root was anchored on Horizen mainnet when the document was registered — verified on-chain.
+      </div>
+    </div>
+    <div class="how-it-works-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>ZK Verification</strong>
+        Anyone can verify this proof on Horizen via <a href="https://zkverify.io" target="_blank">zkVerify</a> — without downloading the document or trusting a third party.
+      </div>
+    </div>
+    <p style="margin-top:16px; color:#666; font-size:0.85em;">
+      This allows third parties to cryptographically verify that a passage existed in a document at a specific block — provably — without requiring access to the original file.
+      Click "🔗 Not verified" on any passage to generate and submit a ZK proof.
+    </p>
+  </div>
+
+</div><!-- /container -->
+
+<!-- Provenance modal -->
+<div id="provenancesModal" class="provenances-modal-overlay" style="display: none;">
+  <div class="provenances-modal">
+    <button class="modal-close" id="provenancesModalClose">✕</button>
+    <h3>🔗 Provenance Verification</h3>
+    <div class="modal-body" id="provenancesModalBody"></div>
+    <div class="provenances-links" id="provenancesLinks"></div>
+  </div>
+</div>
+
+</body>
+</html>
+
+<script type="module">
+    import {
+      searchChunks,
+      fetchContextNav, fetchImageList,
+      fetchZKProof, submitProof, getProofStatus,
+      fetchCollections,
+      fetchSourceInfo, fetchSourcePdf,
+    } from './js/api2.js';
+    import {
+      getState, setState, resetState,
+      getZkCache, setZkCache, seedZkCacheFromResults,
+      groupByDocId, computeLoadedDocCount,
+      INITIAL_SHOW, PAGE_SIZE,
+      recordSearch, saveCurrentSearch
+    } from './js/state.js';
+    import {
+      buildDocGroupHtml, buildPassageCard,
+      buildHowItWorksHtml, buildResultsModalHtml,
+      buildLoadMoreButton,
+      buildLoadingHtml, buildErrorHtml, buildEmptyHtml,
+      escapeHtml, extractPages
+    } from './js/renderer.js';
+    import { init as initEventHandlers } from './js/event-handlers.js';
+    import { init as initApp } from './js/app2.js';
+    window.searchChunks = searchChunks;
+    window.fetchContextNav = fetchContextNav;
+    window.fetchImageList = fetchImageList;
+    window.fetchZKProof = fetchZKProof;
+    window.submitProof = submitProof;
+    window.getProofStatus = getProofStatus;
+    window.fetchCollections = fetchCollections;
+    window.fetchSourceInfo = fetchSourceInfo;
+    window.fetchSourcePdf = fetchSourcePdf;
+    window.getState = getState;
+    window.setState = setState;
+    window.resetState = resetState;
+    window.getZkCache = getZkCache;
+    window.setZkCache = setZkCache;
+    window.seedZkCacheFromResults = seedZkCacheFromResults;
+    window.groupByDocId = groupByDocId;
+    window.computeLoadedDocCount = computeLoadedDocCount;
+    window.INITIAL_SHOW = INITIAL_SHOW;
+    window.PAGE_SIZE = PAGE_SIZE;
+    window.recordSearch = recordSearch;
+    window.saveCurrentSearch = saveCurrentSearch;
+    window.buildDocGroupHtml = buildDocGroupHtml;
+    window.buildPassageCard = buildPassageCard;
+    window.buildHowItWorksHtml = buildHowItWorksHtml;
+    window.buildResultsModalHtml = buildResultsModalHtml;
+    window.buildLoadMoreButton = buildLoadMoreButton;
+    window.buildLoadingHtml = buildLoadingHtml;
+    window.buildErrorHtml = buildErrorHtml;
+    window.buildEmptyHtml = buildEmptyHtml;
+    window.escapeHtml = escapeHtml;
+    window.extractPages = extractPages;
+
+    /*
+     * WEBSITE-007 backwards-compatibility note:
+     * ─────────────────────────────────────────
+     * All inline helpers (renderResults, performSearch, wireZKButtons,
+     * _blockExplorerUrl, _decodeProof, _show*Modal, _verifyOnChain, etc.)
+     * were migrated to app.js and are preserved as window.* exports.
+     * event-handlers.js covers all search/modal/click-outside events.
+     * The window globals below mirror what the legacy inline script provided.
+     *
+     * What was preserved via window.*:
+     *   window.handleSearch         ← app.js handleSearch()
+     *   window.handleLoadMore       ← app.js handleLoadMore()
+     *   window.handleNavProvenance  ← app.js handleNavProvenance()
+     *   window.handleNavPlain       ← app.js handleNavPlain()
+     *   window._verifyOnChain      ← app.js verifyOnChain()
+     *   window._downloadProof      ← app.js downloadProof()
+     *   window._showHowItWorksModal← app.js showHowItWorksModal()
+     *   window._showDecodeModal    ← app.js showDecodeModal()
+     *   window._showResultsModal   ← app.js showResultsModal()
+     *   window.pollInFlightKurierJobs ← app.js pollInFlightKurierJobs() [background job poller]
+     *   window._showToast           ← app.js _showToast() [toast notification]
+     *   window.fetchZKProof        ← api.js fetchZKProof() [exposed by module script above]
+     *   window.fetchContextNav     ← api.js fetchContextNav() [exposed by module script above]
+     *   window.fetchImageList      ← api.js fetchImageList() [exposed by module script above]
+     *   window.submitProof         ← api.js submitProof() [exposed by module script above]
+     *   window.getProofStatus      ← api.js getProofStatus() [exposed by module script above]
+     *   window.searchChunks        ← api.js searchChunks() [exposed by module script above]
+     *   window.getZkCache          ← state.js getZkCache() [exposed by module script above]
+     *   window.setZkCache          ← state.js setZkCache() [exposed by module script above]
+     *   window.buildZkSubmenu      ← renderer.js buildZkSubmenu() [exposed by module script above]
+     *   window.escapeHtml          ← renderer.js escapeHtml() [exposed by module script above]
+     * ─────────────────────────────────────────
+     */
+    initApp();
+    initEventHandlers();
+    // Resume polling for any in-flight Kurier jobs from previous page loads
+    window.pollInFlightKurierJobs?.();
+    </script>
+
+  <div id="paymentModal" class="decode-modal-overlay" style="display: none;">
+    <div class="decode-modal">
+      <button class="modal-close" id="paymentModalClose">✕</button>
+      <h3 id="paymentModalTitle">Download PDF — $0.10 USDC</h3>
+      <div id="paymentModalBody" class="decode-table" style="margin-top:12px;">
+        <div style="color:#b0b0b0;text-align:center;padding:20px;">
+          <div id="paymentSpinner" style="display:inline-block;width:20px;height:20px;border:2px solid #5a8a3c;border-top-color:transparent;border-radius:50%;animation:zk-spin 0.8s linear infinite;vertical-align:middle;margin-right:8px;"></div>
+          Connecting to wallet…
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="decodeModal" class="decode-modal-overlay" style="display: none;">
+    <div class="decode-modal">
+      <button class="modal-close" id="decodeModalClose">✕</button>
+      <h3>🔍 ZK Proof Explanation</h3>
+      <div id="decodeModalBody"></div>
+    </div>
+  </div>
+  </div>
+</body>
+</html>

@@ -5,9 +5,9 @@
 //!
 //! Usage:
 //!   cargo run -p verify-zk-proof -- <path-to-proof.json>
-//!   cargo run -p verify-zk-proof -- /data/military-documents/zk_proofs/<doc_id>_<chunk>.json
+//!   cargo run -p verify-zk-proof -- ./data/zk_proofs/<doc_id>_<chunk>.json
 //!
-//! Logs: structured JSON to /data/military-documents/zk_proofs/verify-zk-proof.log
+//! Logs: structured JSON to ./data/zk_proofs/verify-zk-proof.log
 
 use base64::Engine;
 use plonky2_verifier::{verify, Proof, Vk};
@@ -21,8 +21,8 @@ const B64_ENGINE: base64::engine::general_purpose::GeneralPurpose =
 
 // ─── Logging ─────────────────────────────────────────────────────────────────
 
-const LOG_FILE: &str = "/data/military-documents/zk_proofs/verify-zk-proof.log";
-const LOG_DIR: &str = "/data/military-documents/zk_proofs";
+const LOG_FILE: &str = "./data/zk_proofs/verify-zk-proof.log";
+const LOG_DIR: &str = "./data/zk_proofs";
 
 fn log(level: &str, msg: &str, fields: &[(&str, serde_json::Value)]) {
     let ts = SystemTime::now()

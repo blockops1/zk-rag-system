@@ -20,7 +20,7 @@ import logging
 import sys
 from pathlib import Path
 
-LOG_DIR = Path("../data/logs")
+LOG_DIR = Path("./logs")
 LOG_FILES = {
     "main":    LOG_DIR / "pipeline_main.log",
     "harvest": LOG_DIR / "pipeline_harvest.log",

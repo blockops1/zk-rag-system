@@ -51,7 +51,7 @@ import eth_abi
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-REGISTRY_PATH       = Path("../data/registry.json")
+REGISTRY_PATH       = Path("./data/registry.json")
 DEFAULT_RPC_URL     = "https://horizen-testnet.rpc.caldera.xyz"
 DEFAULT_CONTRACT    = "0x17A6E8AE3f6eb315F4C117630F3AaC8865BD2B15"
 CHAIN_ID            = 2651420          # testnet; change to 26514 for mainnet

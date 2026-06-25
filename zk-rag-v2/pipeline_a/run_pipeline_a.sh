@@ -1,14 +1,14 @@
 #!/bin/bash
 # run_pipeline_a.sh — Pipeline A: fitz-only ingest with stale-lock recovery
 #
-# Lock: ../data/.lock.pipeline_a
+# Lock: ./data/.lock.pipeline_a
 #   - Non-blocking flock — fails immediately if another run is active
 #   - On failure: checks if the lock holder process is dead (stale)
 #     - Dead PID → removes stale lock, retries
 #     - Live PID → exits with warning
 #
 # Prerequisites: rag-api.service must be running
-# Entry: PDFs in ../data/sourcePDF/{branch}/
+# Entry: PDFs in ./data/sourcePDF/{branch}/
 # Exit: writes needs_docling list, sends Telegram per-doc notifications
 #
 # Usage: ./run_pipeline_a.sh [limit]
@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-LOCK_FILE="../data/.lock.pipeline_a"
+LOCK_FILE="./data/.lock.pipeline_a"
 LOG_DIR="./logs"
 VENV_PY="./venv/bin/python3"
 SCRIPT_DIR="./shared"
@@ -115,7 +115,7 @@ fi
 EXIT=$?
 
 # Final storage snapshot
-PDF_MB=$(du -sm ../data/sourcePDF/ 2>/dev/null | cut -f1)
+PDF_MB=$(du -sm ./data/sourcePDF/ 2>/dev/null | cut -f1)
 DATA_PCT=$(df /data | tail -1 | awk '{print $5}')
 log "Done (exit $EXIT) — PDFs: ${PDF_MB}MB, /data: ${DATA_PCT}"
 

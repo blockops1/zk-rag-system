@@ -22,6 +22,8 @@ Exit codes:
 import argparse
 import json
 import logging
+import pickle
+import re
 import sys
 import time
 import uuid
@@ -63,7 +65,7 @@ def _invalidate_query_cache_for_collection(collection: str) -> bool:
         return False
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
-LOG_DIR = Path("../data/logs")
+LOG_DIR = Path(".../data/logs")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "pipeline_g.log"
 
@@ -80,11 +82,12 @@ logger = logging.getLogger("pipeline_g")
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-REGISTRY_PATH = Path("../data/registry.json")
-MERKLE_TREES_DIR = Path("../data/merkleTrees")
-CHUNKS_DIR = Path("../data/chunks")
-EMBEDDINGS_DIR = Path("../data/embeddings")
-QDRANT_PATH = Path("../data/qdrant")
+REGISTRY_PATH = Path("./data/registry.json")
+MERKLE_TREES_DIR = Path("./data/merkleTrees")
+CHUNKS_DIR = Path("./data/chunks")
+EMBEDDINGS_DIR = Path("./data/embeddings")
+QDRANT_PATH = Path("./data/qdrant")
+BM25_INDEX_PATH = Path("./data/bm25_index.pkl")
 EMBEDDING_DIM = 768  # NomicEmbedText-v1.5 produces 768-dimensional vectors
 TEXT_TRUNCATE_LEN = 2000  # chars per chunk — keeps Qdrant payload under 32MB limit for high-chunk-count docs
 
@@ -522,6 +525,164 @@ def apply_ingested_update(registry_entry: dict, chunk_count: int) -> None:
     registry_entry["ingested_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def apply_bm25_indexed_update(registry_entry: dict) -> None:
+    """
+    Mark a registry entry as bm25_indexed.
+
+    Writes in-place to the registry entry dict.
+    Caller is responsible for saving the registry.
+    """
+    registry_entry["bm25_indexed"] = True
+
+
+# ── BM25 Index Helpers ────────────────────────────────────────────────────────
+
+def tokenize_text(text: str) -> list[str]:
+    """Simple tokenization: lowercase and split on word boundaries."""
+    text = text.lower()
+    tokens = re.findall(r'\b\w+\b', text)
+    return tokens
+
+
+def load_bm25_index(index_path: Path) -> dict:
+    """
+    Load existing BM25 index from pickle file.
+    
+    Returns dict with:
+        - 'bm25': BM25Okapi instance
+        - 'chunk_ids': list of chunk_id strings aligned with BM25 corpus
+        - 'doc_ids': list of doc_id strings (one per chunk)
+    """
+    if not index_path.exists():
+        return {
+            "bm25": None,
+            "chunk_ids": [],
+            "doc_ids": [],
+        }
+    
+    with open(index_path, "rb") as f:
+        return pickle.load(f)
+
+
+def save_bm25_index(index_path: Path, bm25_model, chunk_ids: list, doc_ids: list) -> None:
+    """Save BM25 index to pickle file."""
+    index_data = {
+        "bm25": bm25_model,
+        "chunk_ids": chunk_ids,
+        "doc_ids": doc_ids,
+    }
+    with open(index_path, "wb") as f:
+        pickle.dump(index_data, f)
+
+
+def build_bm25_index_incremental(
+    ingested_doc_ids: list[str],
+    chunks_dir: Path,
+    index_path: Path,
+    registry: dict,
+) -> list[str]:
+    """
+    Build BM25 index incrementally for newly ingested documents.
+
+    Loads existing index, skips docs already marked bm25_indexed in registry,
+    appends new chunks, and saves updated index.
+    Each chunk is indexed separately (not concatenated by document).
+
+    chunk_id format: '{doc_id}-{chunk_index}' (e.g. '0a21e769...-0')
+
+    Returns list of doc_ids that were actually indexed (not already indexed).
+    """
+    if not ingested_doc_ids:
+        print("No documents to add to BM25 index")
+        return []
+
+    # Filter out docs already bm25_indexed
+    registry_entries = {d["doc_id"]: d for d in registry["documents"]}
+    to_index = [
+        doc_id for doc_id in ingested_doc_ids
+        if not registry_entries.get(doc_id, {}).get("bm25_indexed", False)
+    ]
+    skipped = len(ingested_doc_ids) - len(to_index)
+    if skipped:
+        print(f"BM25: skipping {skipped} docs already indexed")
+    
+    # Import rank_bm25 here to avoid import if not needed
+    try:
+        from rank_bm25 import BM25Okapi
+    except ImportError:
+        print("WARNING: rank_bm25 not installed. Skipping BM25 index build.")
+        print("Install with: pip install rank_bm25")
+        return []
+    
+    # Load existing index
+    index_data = load_bm25_index(index_path)
+    existing_chunk_ids_set = set(index_data["chunk_ids"])
+
+    # Collect new chunks from ingested documents
+    new_corpus = []
+    new_chunk_ids = []
+    new_doc_ids = []
+    
+    for doc_id in to_index:
+        chunks_path = chunks_dir / doc_id / "chunks.jsonl"
+        if not chunks_path.exists():
+            print(f"WARNING: chunks.jsonl not found for {doc_id}, skipping BM25 indexing")
+            continue
+        
+        # Load all chunks for this document
+        chunks = load_chunks(chunks_path)
+        
+        for chunk in chunks:
+            chunk_id = chunk["chunk_id"]
+            
+            # Skip if already indexed
+            if chunk_id in existing_chunk_ids_set:
+                continue
+            
+            # Tokenize chunk text and add to new corpus
+            chunk_text = chunk.get("text", "")
+            tokens = tokenize_text(chunk_text)
+            new_corpus.append(tokens)
+            new_chunk_ids.append(chunk_id)
+            new_doc_ids.append(doc_id)
+    
+    if not new_corpus:
+        print("No new chunks to add to BM25 index (all already indexed)")
+        return []
+
+    # Append new chunks to existing index data
+    all_chunk_ids = index_data["chunk_ids"] + new_chunk_ids
+    all_doc_ids = index_data["doc_ids"] + new_doc_ids
+    
+    # Build full corpus for BM25
+    # Need to reload existing corpus from chunks since we only stored IDs
+    full_corpus = []
+    
+    # Rebuild corpus from existing chunk_ids
+    for existing_chunk_id in index_data["chunk_ids"]:
+        doc_id = existing_chunk_id.rsplit("-", 1)[0]  # Extract doc_id from chunk_id
+        chunks_path = chunks_dir / doc_id / "chunks.jsonl"
+        if chunks_path.exists():
+            chunks = load_chunks(chunks_path)
+            for chunk in chunks:
+                if chunk["chunk_id"] == existing_chunk_id:
+                    full_corpus.append(tokenize_text(chunk.get("text", "")))
+                    break
+    
+    # Add new corpus
+    full_corpus.extend(new_corpus)
+    
+    # Rebuild BM25 model with full corpus
+    bm25_model = BM25Okapi(full_corpus)
+    
+    # Save updated index
+    save_bm25_index(index_path, bm25_model, all_chunk_ids, all_doc_ids)
+    
+    print(f"BM25 index updated: {len(all_chunk_ids)} chunks indexed ({len(new_chunk_ids)} new)")
+    return to_index
+
+
+# ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="Pipeline G - Qdrant upsert with Merkle + EVM metadata")
@@ -565,6 +726,7 @@ def main():
     # ── Process each doc ──────────────────────────────────────────────────────
     success_count = 0
     fail_count = 0
+    ingested_doc_ids = []  # BM25 DISABLED — kept for reference, not used
 
     for doc_id in doc_ids:
         if doc_id not in registry_entries:
@@ -593,7 +755,11 @@ def main():
             success_count += 1
             if not args.dry_run:
                 apply_ingested_update(entry, chunk_count=entry.get("chunk_count", 0))
-                _invalidate_query_cache_for_collection(entry.get("branch", ""))
+                ingested_doc_ids.append(doc_id)
+                # Invalidate query result cache for this collection so next query gets fresh results
+                collection = entry.get("branch", "")
+                if collection:
+                    _invalidate_query_cache_for_collection(collection)
         else:
             fail_count += 1
 
@@ -609,6 +775,24 @@ def main():
             json.dump(registry, f, indent=2)
         tmp.rename(REGISTRY_PATH)
         logger.info("Registry saved to %s", REGISTRY_PATH)
+
+    # ── Build BM25 index (batch mode only, not dry-run) ───────────────────────
+    # BM25 DISABLED — remove BM25 index build entirely pending future rebuild
+    # if args.batch and not args.dry_run and ingested_doc_ids:
+    #     logger.info("Building BM25 index for %d documents...", len(ingested_doc_ids))
+    #     indexed_doc_ids = build_bm25_index_incremental(
+    #         ingested_doc_ids, CHUNKS_DIR, BM25_INDEX_PATH, registry
+    #     )
+    #     # Mark successfully indexed docs in registry
+    #     for doc_id in indexed_doc_ids:
+    #         if doc_id in registry_entries:
+    #             apply_bm25_indexed_update(registry_entries[doc_id])
+    #     # Save registry with bm25_indexed flags
+    #     tmp = REGISTRY_PATH.with_suffix(".json.tmp")
+    #     with open(tmp, "w") as f:
+    #         json.dump(registry, f, indent=2)
+    #     tmp.rename(REGISTRY_PATH)
+    #     logger.info("BM25 index built and registry saved")
 
     # ── Summary ───────────────────────────────────────────────────────────────
     logger.info("=== SUMMARY === total=%d ingested=%d failed=%d", success_count + fail_count, success_count, fail_count)

@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZK Provenance — Verify Any Document Corpus on zkVerify</title>
+  <meta name="description" content="ZK-Proven document search. Cryptographically prove your AI results come from real documents — not fabrications. Built on zkVerify with Plonky2 zero-knowledge circuits.">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://verifiabledocuments.com/">
+  <meta property="og:title" content="ZK Provenance — Verify Any Document Corpus on zkVerify">
+  <meta property="og:description" content="ZK-Proven document search. Cryptographically prove your AI results come from real documents — not fabrications. Built on zkVerify with Plonky2 zero-knowledge circuits.">
+  <meta name="twitter:image" content="https://verifiabledocuments.com/og-image.png">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="ZK Provenance — Verify Any Document Corpus on zkVerify">
+  <meta name="twitter:description" content="ZK-Proven document search. Cryptographically prove your AI results come from real documents — not fabrications. Built on zkVerify with Plonky2 zero-knowledge circuits.">
+
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --card-bg: #16213e;
+      --card-border: #2a2a4a;
+      --accent: #64b5f6;
+      --accent-amber: #f0a500;
+      --text: #e0e0e0;
+      --text-muted: #888;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.7; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1em 2em; background: var(--card-bg);
+      border-bottom: 1px solid var(--card-border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    nav .logo { font-weight: 700; font-size: 1.05em; color: #fff; letter-spacing: -0.02em; }
+    nav .logo span { color: var(--accent-amber); }
+    nav .nav-links { display: flex; gap: 1.5em; list-style: none; flex-wrap: wrap; }
+    nav .nav-links a { color: var(--text-muted); font-size: 0.88em; }
+    nav .nav-links a:hover { color: var(--accent); text-decoration: none; }
+
+    .container { max-width: 960px; margin: 0 auto; padding: 0 1.5em; }
+    section { padding: 4em 0; }
+    section + section { border-top: 1px solid var(--card-border); }
+    h2 { color: #fff; font-size: 1.6em; font-weight: 700; margin-bottom: 0.6em; letter-spacing: -0.02em; }
+    .sub { color: var(--text-muted); font-size: 1.05em; max-width: 580px; margin-bottom: 2em; }
+
+    .hero { padding: 5em 0 4em; text-align: center; border-top: none; }
+    .hero h1 { font-size: clamp(2em, 5vw, 3em); font-weight: 800; color: #fff; letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 0.4em; }
+    .hero h1 .amber { color: var(--accent-amber); }
+    .hero .tagline { font-size: 1.15em; color: var(--text-muted); margin-bottom: 2em; }
+    .hero-ctas { display: flex; gap: 1em; justify-content: center; flex-wrap: wrap; margin-bottom: 1.5em; }
+    .btn {
+      display: inline-block; padding: 0.7em 1.6em; border-radius: 6px;
+      font-size: 0.95em; font-weight: 600; cursor: pointer;
+      transition: background 0.15s, transform 0.1s; text-decoration: none;
+    }
+    .btn:hover { text-decoration: none; transform: translateY(-1px); }
+    .btn-primary { background: var(--accent); color: #0a0e1a; }
+    .btn-primary:hover { background: #82c4f8; }
+    .btn-secondary { background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+    .hero-stats {
+      display: flex; gap: 2em; justify-content: center; flex-wrap: wrap;
+      margin-top: 2.5em; padding-top: 2em; border-top: 1px solid var(--card-border);
+    }
+    .stat { text-align: center; }
+    .stat .num { font-size: 1.6em; font-weight: 700; color: var(--accent-amber); }
+    .stat .lbl { font-size: 0.8em; color: var(--text-muted); margin-top: 0.2em; }
+    .hero-proof-bar {
+      display: flex; gap: 0.6em; justify-content: center; flex-wrap: wrap;
+      margin-top: 2em; font-size: 0.82em; color: var(--text-muted);
+    }
+    .hero-proof-bar .sep { color: var(--card-border); }
+
+    .problem-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5em; margin-top: 2em; }
+    .problem-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 1.5em; }
+    .problem-card h3 { color: #fff; font-size: 0.95em; font-weight: 700; margin-bottom: 0.7em; display: flex; align-items: center; gap: 0.5em; }
+    .problem-card p { font-size: 0.88em; color: var(--text-muted); line-height: 1.65; }
+    .problem-closing {
+      margin-top: 2em; text-align: center; font-size: 1.05em; color: var(--text-muted);
+      padding: 1.2em; background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: 8px; max-width: 560px; margin-left: auto; margin-right: auto;
+    }
+    .problem-closing strong { color: var(--accent-amber); }
+
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5em; margin-top: 2em; position: relative; }
+    .step { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 1.8em 1.5em; text-align: center; position: relative; }
+    .step-num { display: inline-block; background: var(--accent-amber); color: #0a0e1a; font-size: 0.75em; font-weight: 800; width: 26px; height: 26px; line-height: 26px; border-radius: 50%; margin-bottom: 1em; }
+    .step h3 { color: #fff; font-size: 1em; font-weight: 700; margin-bottom: 0.6em; text-transform: uppercase; letter-spacing: 0.05em; }
+    .step p { font-size: 0.85em; color: var(--text-muted); line-height: 1.65; }
+    .step-arrow { position: absolute; top: 50%; right: -1.1em; transform: translateY(-50%); color: var(--accent); font-size: 1.2em; z-index: 1; }
+    .step:last-child .step-arrow { display: none; }
+    .zk-magic-callout {
+      display: flex; align-items: flex-start; gap: 1em;
+      background: rgba(240,165,0,0.07); border: 1px solid rgba(240,165,0,0.3);
+      border-radius: 8px; padding: 1.2em 1.5em; margin-top: 2em;
+      font-size: 0.9em; color: var(--text-muted); line-height: 1.65;
+    }
+    .zk-magic-callout .zk-icon { font-size: 1.4em; flex-shrink: 0; line-height: 1.5; }
+    .zk-magic-callout strong { color: var(--accent-amber); }
+    .zk-magic-callout em { color: var(--accent); font-style: normal; }
+
+    /* ── Architecture diagram (from militarymanuals.ai) ── */
+    .arch-section { margin: 32px 0 8px; }
+    .arch-row-label { font-size: 0.72em; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; font-weight: 600; }
+    .arch-row-label-2 { margin-top: 16px; margin-bottom: 6px; }
+    .arch-phase { color: var(--text-muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+    .arch-caption { text-align: center; color: var(--text-muted); font-size: 0.8em; margin-top: -4px; margin-bottom: 0; }
+    .arch-diagram { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 24px 16px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; margin: 16px 0 20px; flex-wrap: wrap; }
+    .arch-step { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 70px; text-align: center; }
+    .arch-icon { font-size: 1.6em; line-height: 1; }
+    .arch-label { font-size: 0.75em; color: var(--text-muted); line-height: 1.3; }
+    .arch-arrow { color: var(--accent); font-size: 1.2em; opacity: 0.6; }
+
+    .demo-box { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 2.5em; text-align: center; margin-top: 2em; }
+    .demo-tech { display: flex; gap: 1.5em; justify-content: center; flex-wrap: wrap; margin-top: 1.5em; padding-top: 1.5em; border-top: 1px solid var(--card-border); }
+    .demo-tech span { font-size: 0.8em; color: var(--text-muted); display: flex; align-items: center; gap: 0.4em; }
+    /* New demo search example */
+    .demo-search-example { background: var(--bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1.5em; margin-bottom: 1.8em; text-align: left; }
+    .demo-search-label { font-size: 0.8em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5em; }
+    .demo-search-query { font-size: 1em; color: var(--accent-amber); font-weight: 600; margin-bottom: 0.8em; }
+    .demo-search-meta { display: flex; align-items: center; gap: 1em; margin-bottom: 1em; }
+    .demo-badge { display: inline-block; padding: 0.25em 0.7em; border-radius: 20px; font-size: 0.78em; font-weight: 700; }
+    .demo-badge--verified { background: rgba(90,138,60,0.2); color: #5a8a3c; border: 1px solid rgba(90,138,60,0.4); }
+    .demo-badge-meta { font-size: 0.78em; color: var(--text-muted); }
+    .demo-search-result { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 6px; padding: 1em 1.2em; }
+    .demo-result-title { color: var(--text); font-weight: 700; font-size: 0.9em; margin-bottom: 0.4em; }
+    .demo-result-snippet { color: var(--text-muted); font-size: 0.82em; line-height: 1.6; margin-bottom: 0.6em; font-style: italic; }
+    .demo-result-provenance { font-size: 0.72em; color: #5a8a3c; }
+    .demo-ctas { margin-bottom: 1.2em; }
+
+    .use-case-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1em; margin-top: 2em; }
+    .use-case-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1.2em 1em; transition: border-color 0.15s; }
+    .use-case-card:hover { border-color: var(--accent); }
+    .use-case-card .uc-icon { font-size: 1.4em; margin-bottom: 0.5em; }
+    .use-case-card h4 { color: #fff; font-size: 0.88em; font-weight: 700; margin-bottom: 0.4em; }
+    .use-case-card p { font-size: 0.8em; color: var(--text-muted); line-height: 1.55; }
+
+    .setup-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5em; margin-top: 2em; }
+    .setup-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 1.5em; }
+    .setup-card h4 { color: #fff; font-size: 0.9em; font-weight: 700; margin-bottom: 0.5em; }
+    .setup-card p { font-size: 0.82em; color: var(--text-muted); line-height: 1.6; }
+    .setup-card .sc-label { display: inline-block; background: rgba(100,181,246,0.12); color: var(--accent); font-size: 0.72em; font-weight: 700; padding: 0.2em 0.6em; border-radius: 20px; margin-bottom: 0.7em; text-transform: uppercase; letter-spacing: 0.05em; }
+    .setup-card .sc-label--zk { background: rgba(240,165,0,0.12); color: var(--accent-amber); }
+    .setup-cta { text-align: center; margin-top: 2.5em; }
+    .setup-cta p { color: var(--text-muted); font-size: 0.9em; margin-bottom: 1em; }
+    .setup-flow { display: flex; gap: 0.5em; justify-content: center; align-items: center; flex-wrap: wrap; margin-top: 0.8em; font-size: 0.82em; color: var(--text-muted); }
+    .setup-flow span { color: var(--accent-amber); font-weight: 700; }
+
+    .stack-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1em; margin-top: 2em; }
+    .stack-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 1.5em 1em; text-align: center; transition: border-color 0.15s; }
+    .stack-card:hover { border-color: var(--accent); }
+    .stack-card .sc-logo { font-size: 2em; margin-bottom: 0.6em; display: block; }
+    .stack-card h4 { color: #fff; font-size: 0.88em; font-weight: 700; margin-bottom: 0.4em; }
+    .stack-card p { font-size: 0.76em; color: var(--text-muted); line-height: 1.5; }
+
+    .final-cta-box {
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: 12px; padding: 3em 2em; text-align: center;
+    }
+    .final-cta-box h2 { color: #fff; font-size: 1.6em; margin-bottom: 0.6em; }
+    .final-cta-box p { color: var(--text-muted); font-size: 1em; max-width: 500px; margin: 0 auto 2em; }
+    .final-cta-buttons { display: flex; gap: 1em; justify-content: center; flex-wrap: wrap; margin-bottom: 1.2em; }
+    .final-cta-email { font-size: 0.85em; color: var(--text-muted); }
+
+    footer { background: var(--card-bg); border-top: 1px solid var(--card-border); padding: 2em 0; margin-top: 0; }
+    footer .container { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1em; }
+    footer .footer-left { font-size: 0.82em; color: var(--text-muted); }
+    footer .footer-right { display: flex; gap: 1.5em; list-style: none; }
+    footer .footer-right a { color: var(--text-muted); font-size: 0.85em; }
+    footer .footer-right a:hover { color: var(--accent); }
+
+    @media (max-width: 720px) {
+      nav { padding: 0.8em 1em; }
+      nav .nav-links { gap: 1em; }
+      .problem-grid { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; }
+      .step-arrow { display: none; }
+      .setup-grid { grid-template-columns: 1fr; }
+      .stack-grid { grid-template-columns: repeat(2, 1fr); }
+      section { padding: 3em 0; }
+      .hero { padding: 3.5em 0 3em; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">ZK <span>Provenance</span></div>
+  <ul class="nav-links">
+    <li><a href="#how-it-works">How It Works</a></li>
+    <li><a href="#use-cases">Use Cases</a></li>
+    <li><a href="#setup">Build</a></li>
+    <li><a href="https://github.com/blockops1/zk-rag-system" target="_blank" rel="noopener">GitHub</a></li>
+    <li><a href="https://kurier.xyz" target="_blank" rel="noopener">Kurier</a></li>
+    <li><a href="https://zkverify.io" target="_blank" rel="noopener">zkVerify</a></li>
+  </ul>
+</nav>
+
+<section class="hero">
+  <div class="container">
+    <h1>End AI Hallucinations.<br>Prove Every Citation<br><span class="amber">Cryptographically.</span></h1>
+    <p class="tagline">ZK Provenance adds a cryptographic proof layer to document search.<br>Every result can be independently verified — without exposing a single source document.</p>
+    <div class="hero-ctas">
+      <a href="https://militarymanuals.ai" class="btn btn-primary" target="_blank" rel="noopener">See the Live Demo →</a>
+      <a href="https://github.com/blockops1/zk-rag-system" class="btn btn-secondary" target="_blank" rel="noopener">Build Your Own →</a>
+    </div>
+    <div class="hero-proof-bar">
+      <span>● 527 documents proven</span>
+      <span class="sep">·</span>
+      <span>● Plonky2 ZK circuits</span>
+      <span class="sep">·</span>
+      <span>● Live on Horizen EVM</span>
+      <span class="sep">·</span>
+      <span>● zkVerify verification</span>
+    </div>
+  </div>
+</section>
+
+<section id="the-problem">
+  <div class="container">
+    <h2>The Problem</h2>
+    <p class="sub">AI systems hallucinate citations — confidently attributing claims to documents that don't exist. Traditional RAG helps, but can't prove a result actually came from your corpus. ZK Provenance fixes both.</p>
+    <div class="problem-grid">
+      <div class="problem-card">
+        <h3>🤖 AI Hallucinates Citations</h3>
+        <p>ChatGPT confidently cites a Pentagon report that doesn't exist — sounding completely authoritative while being entirely fabricated. A search engine built on AI inherits this failure mode. Users have no way to tell fact from fiction.</p>
+      </div>
+      <div class="problem-card">
+        <h3>🔍 Traditional RAG Has No Proof</h3>
+        <p>Standard RAG retrieves relevant chunks from a corpus, but provides no cryptographic evidence that the chunks actually belong to the committed documents. It's a trust claim, not a proof — and it's useless if the corpus owner goes offline.</p>
+      </div>
+      <div class="problem-card">
+        <h3>🌐 Exposing Documents Compromises IP</h3>
+        <p>Sharing full documents to prove authenticity defeats the purpose for proprietary content. Publishers and researchers can't expose their corpus just to prove citations are real.</p>
+      </div>
+      <div class="problem-card">
+        <h3>⛓️ Centralized Proofs Are Bought Off</h3>
+        <p>A trusted third party that issues proof certificates is a single point of failure. If the authority is compromised or disappears, the proof is worthless.</p>
+      </div>
+    </div>
+    <p class="problem-closing">Traditional RAG gives you answers. <strong>ZK Provenance gives you provable truth.</strong></p>
+  </div>
+</section>
+
+<section id="how-it-works">
+  <div class="container">
+    <h2>How It Works</h2>
+    <p class="sub">ZK Provenance adds a cryptographic layer to document search. Every result carries a proof that can be independently verified — without revealing the underlying documents.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Commit</h3>
+        <p>Upload your corpus once. The system builds a Poseidon Merkle tree over all chunks and anchors the root on Horizen EVM — permanently and publicly.</p>
+        <span class="step-arrow">→</span>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Search</h3>
+        <p>Query the corpus semantically. Each result comes with a ZK proof generated locally in milliseconds — proving the passage belongs to a committed document.</p>
+        <span class="step-arrow">→</span>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Verify</h3>
+        <p>Anyone verifies the proof on <a href="https://zkverify.io" target="_blank" rel="noopener">zkVerify</a> — the result is provably authentic, without exposing your documents.</p>
+      </div>
+    </div>
+
+    <div class="zk-magic-callout">
+      <span class="zk-icon">🔮</span>
+      <div>
+        <strong>Zero-Knowledge Magic:</strong> The verifier learns a passage came from your corpus —
+        but learns <em>nothing</em> about any other document in it. Privacy and proof, simultaneously.
+      </div>
+    </div>
+
+    <!-- Architecture diagram (from militarymanuals.ai) -->
+    <div class="arch-section">
+      <div class="arch-row-label">Corpus Setup <span class="arch-phase">(one-time indexing)</span></div>
+      <div class="arch-diagram">
+        <div class="arch-step"><div class="arch-icon">&#128196;</div><div class="arch-label">Your PDFs</div></div>
+        <div class="arch-arrow">&#8594;</div>
+        <div class="arch-step"><div class="arch-icon">&#9881;</div><div class="arch-label">Pipeline<br>(extract, chunk, embed)</div></div>
+        <div class="arch-arrow">&#8594;</div>
+        <div class="arch-step"><div class="arch-icon">&#128275;</div><div class="arch-label">Merkle Tree<br>+ ZK Proof</div></div>
+        <div class="arch-arrow">&#8594;</div>
+        <div class="arch-step"><div class="arch-icon">&#128440;</div><div class="arch-label">Horizen<br>Blockchain</div></div>
+      </div>
+      <div class="arch-row-label arch-row-label-2">Query <span class="arch-phase">(at search time)</span></div>
+      <div class="arch-diagram">
+        <div class="arch-step"><div class="arch-icon">&#128269;</div><div class="arch-label">Search<br>API</div></div>
+        <div class="arch-arrow">&#8594;</div>
+        <div class="arch-step"><div class="arch-icon">&#128275;</div><div class="arch-label">Generate<br>ZK Proof</div></div>
+        <div class="arch-arrow">&#8594;</div>
+        <div class="arch-step"><div class="arch-icon">&#128648;</div><div class="arch-label">Kurier<br>API</div></div>
+        <div class="arch-arrow">&#8594;</div>
+        <div class="arch-step"><div class="arch-icon">&#9983;</div><div class="arch-label">zkVerify</div></div>
+        <div class="arch-arrow">&#8594;</div>
+        <div class="arch-step"><div class="arch-icon">&#10003;</div><div class="arch-label">Verified<br>Result</div></div>
+      </div>
+    </div>
+    <p class="arch-caption">Documents are anchored on-chain once. Every search triggers a fresh ZK proof verified via Kurier → zkVerify — provably, without revealing the documents.</p>
+  </div>
+</section>
+
+<section id="live-demo">
+  <div class="container">
+    <h2>Live Demo</h2>
+    <p class="sub">527 US military field manuals and technical publications — searchable with cryptographic proof of provenance. Every result carries a ZK proof that can be verified on zkVerify.</p>
+    <div class="demo-box">
+      <div class="demo-search-example">
+        <div class="demo-search-label">Try a search like:</div>
+        <div class="demo-search-query">"rules of engagement urban operations"</div>
+        <div class="demo-search-meta">
+          <span class="demo-badge demo-badge--verified">✅ Verified</span>
+          <span class="demo-badge-meta">Proof generated · 18s on zkVerify</span>
+        </div>
+        <div class="demo-search-result">
+          <div class="demo-result-title">FM 3-06 — Urban Operations</div>
+          <div class="demo-result-snippet">"...units must maintain situational awareness while distinguishing between combatants and civilians in close-quarters engagement..."</div>
+          <div class="demo-result-provenance">Provenance: FM3-06 · Page 4-12 · Chunk 7 · Merkle proof verified on Horizen</div>
+        </div>
+      </div>
+      <div class="demo-ctas">
+        <a href="https://militarymanuals.ai" class="btn btn-primary" target="_blank" rel="noopener">Open the Live Demo →</a>
+      </div>
+      <div class="demo-tech">
+        <span>✅ 527 documents</span>
+        <span>✅ On-chain Merkle root</span>
+        <span>✅ Plonky2 ZK proofs</span>
+        <span>✅ zkVerify verification</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="use-cases">
+  <div class="container">
+    <h2>What You Can Build</h2>
+    <p class="sub">ZK Provenance applies anywhere documents, authenticity, and privacy need to coexist.</p>
+    <div class="use-case-grid">
+      <div class="use-case-card"><div class="uc-icon">📚</div><h4>Historical Archives</h4><p>Publishers share citations from vintage manuals — peers verify authenticity without needing access to the original documents.</p></div>
+      <div class="use-case-card"><div class="uc-icon">🔬</div><h4>Academic Research</h4><p>Researchers publish field notes and datasets with ZK proofs of origin. Peers verify provenance without accessing the full corpus.</p></div>
+      <div class="use-case-card"><div class="uc-icon">⚖️</div><h4>Legal & Compliance</h4><p>Contracts and regulatory filings are timestamped on-chain. Auditors verify authenticity in seconds — without reading the sensitive terms.</p></div>
+      <div class="use-case-card"><div class="uc-icon">📰</div><h4>Investigative Journalism</h4><p>Newsrooms publish document archives with cryptographic proof of origin — readers verify authenticity without the source having to release raw files.</p></div>
+      <div class="use-case-card"><div class="uc-icon">🎨</div><h4>Creative Works</h4><p>Photographers, artists, and writers establish public timestamps of original works without publishing the work itself.</p></div>
+      <div class="use-case-card"><div class="uc-icon">🏭</div><h4>Supply Chain</h4><p>Compliance certificates and authenticity reports prove a document is original and unmodified — without exposing proprietary process details.</p></div>
+      <div class="use-case-card"><div class="uc-icon">🏛️</div><h4>Public Records</h4><p>FOIA releases and government documents carry verified timestamps. Citizens confirm authenticity without needing the full archive.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="setup">
+  <div class="container">
+    <h2>Set Up Your Own</h2>
+    <p class="sub">Everything is open source. Clone the repo, configure your credentials, and deploy a ZK-Proven search system for your own document corpus.</p>
+    <div class="setup-grid">
+      <div class="setup-card">
+        <span class="sc-label sc-label--zk">Proof Layer</span>
+        <h4>zkVerify</h4>
+        <p>The proof verification layer on Horizen. Plonky2 proofs are submitted through Kurier's API and verified on-chain at zkVerify — low gas, high throughput. <a href="https://zkverify.io" target="_blank" rel="noopener">zkverify.io →</a></p>
+      </div>
+      <div class="setup-card">
+        <span class="sc-label">Blockchain</span>
+        <h4>Horizen EVM</h4>
+        <p>The MerkleRootRegistry contract anchors your corpus root permanently on Horizen — publicly verifiable, censorship-resistant. Requires a wallet with ZEN for gas. Foundry deployment scripts included.</p>
+      </div>
+      <div class="setup-card">
+        <span class="sc-label">API</span>
+        <h4>Kurier</h4>
+        <p>Submit ZK proofs to zkVerify through Kurier's API. Get an API key at <a href="https://kurier.xyz" target="_blank" rel="noopener">kurier.xyz</a>. Handles proof job lifecycle, retries, and status polling.</p>
+      </div>
+      <div class="setup-card">
+        <span class="sc-label">Data</span>
+        <h4>Your Documents</h4>
+        <p>Any PDF corpus you hold the rights to. The pipeline extracts text, runs OCR on scanned pages, chunks, embeds, and upserts to Qdrant — then builds the Merkle proof structure.</p>
+      </div>
+    </div>
+    <div class="setup-cta">
+      <p>Full instructions, deployment scripts, and circuit binaries on GitHub.</p>
+      <a href="https://github.com/blockops1/zk-rag-system" class="btn btn-primary" target="_blank" rel="noopener">Clone on GitHub →</a>
+      <div class="setup-flow"><span>Clone</span> → <span>Configure</span> → <span>Deploy</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="tech-stack">
+  <div class="container">
+    <h2>Technology Stack</h2>
+    <p class="sub">Built on battle-tested open-source infrastructure.</p>
+    <div class="stack-grid">
+      <div class="stack-card">
+        <span class="sc-logo">🌐</span>
+        <h4>Horizen EVM</h4>
+        <p>Decentralized EVM chain for on-chain Merkle root commitments. Public, censorship-resistant, and permanent.</p>
+        <br><a href="https://horizen.io" target="_blank" rel="noopener">horizen.io →</a>
+      </div>
+      <div class="stack-card">
+        <span class="sc-logo">🔗</span>
+        <h4>zkVerify</h4>
+        <p>Zero-knowledge proof verification layer on Horizen. Off-chain computation, on-chain verification, low gas cost.</p>
+        <br><a href="https://zkverify.io" target="_blank" rel="noopener">zkverify.io →</a>
+      </div>
+      <div class="stack-card">
+        <span class="sc-logo">⚡</span>
+        <h4>Kurier</h4>
+        <p>API service for submitting and tracking ZK proof jobs to zkVerify. Handles the dev ops of proof submission so you don't have to.</p>
+        <br><a href="https://kurier.xyz" target="_blank" rel="noopener">kurier.xyz →</a>
+      </div>
+      <div class="stack-card">
+        <span class="sc-logo">⚙️</span>
+        <h4>Plonky2</h4>
+        <p>Fast recursive SNARKs for local proof generation. Pre-built circuit binaries included (depth 5–12). No ZK expertise required to run.</p>
+        <br><a href="https://github.com/blockops1/zk-prover-verifier-plonky2" target="_blank" rel="noopener">GitHub →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="final-cta">
+  <div class="container">
+    <div class="final-cta-box">
+      <h2>Ready to make your documents verifiable?</h2>
+      <p>Turn any document corpus into a provably authentic search engine. Open source, self-hosted, running today on Horizen + zkVerify.</p>
+      <div class="final-cta-buttons">
+        <a href="https://militarymanuals.ai" class="btn btn-primary" target="_blank" rel="noopener">See Live Demo →</a>
+        <a href="https://github.com/blockops1/zk-rag-system" class="btn btn-secondary" target="_blank" rel="noopener">Star on GitHub</a>
+        <a href="https://kurier.xyz" class="btn btn-secondary" target="_blank" rel="noopener">Get API Access</a>
+      </div>
+      <div class="final-cta-email">Questions? <a href="mailto:jacksprat@crestvieworchards.com">jacksprat@crestvieworchards.com</a></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-left">
+      ZK Provenance — open-source ZK-RAG on Horizen.<br>
+      Contact: <a href="mailto:jacksprat@crestvieworchards.com">jacksprat@crestvieworchards.com</a>
+    </div>
+    <ul class="footer-right">
+      <li><a href="https://github.com/blockops1/zk-rag-system" target="_blank" rel="noopener">GitHub</a></li>
+      <li><a href="https://kurier.xyz" target="_blank" rel="noopener">Kurier</a></li>
+      <li><a href="https://zkverify.io" target="_blank" rel="noopener">zkVerify</a></li>
+      <li><a href="https://horizen.io" target="_blank" rel="noopener">Horizen</a></li>
+    </ul>
+  </div>
+</footer>
+
+</body>
+</html>

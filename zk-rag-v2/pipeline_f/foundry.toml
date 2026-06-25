@@ -1,0 +1,12 @@
+[profile.default]
+root = "."
+src = "contracts"
+out = "out"
+libs = ["lib"]
+optimizer = true
+optimizer_runs = 999999
+via_ir = true
+fs_permissions = [
+  { access = "read", path = "./data/" },
+  { access = "read-write", path = "./pipeline_f/broadcast/" }
+]

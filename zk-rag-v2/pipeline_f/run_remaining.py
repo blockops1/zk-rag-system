@@ -8,8 +8,8 @@ import os
 import time
 from pathlib import Path
 
-REGISTRY_PATH = Path("../data/registry.json")
-MERKLE_DIR    = Path("../data/merkleTrees")
+REGISTRY_PATH = Path("./data/registry.json")
+MERKLE_DIR    = Path("./data/merkleTrees")
 LOG_DIR       = Path("../data/logs")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -140,7 +140,7 @@ for run_idx, run in enumerate(runs):
 
         # Update registry for each doc in this run
         import fcntl
-        lock_fd = open("../data/registry.lock", "w")
+        lock_fd = open("./data/registry.lock", "w")
         fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
         try:
             reg2 = json.load(open(REGISTRY_PATH))

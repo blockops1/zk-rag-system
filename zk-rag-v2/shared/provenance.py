@@ -50,12 +50,12 @@ from typing import Optional
 
 
 PROVE_BINARY      = Path(os.environ.get("ZK_PROVE_BINARY",      "./zk-circuit/target/release/prove-bin"))
-MERKLE_TREES_DIR  = Path(os.environ.get("ZK_MERKLE_TREES_DIR",  "../data/merkleTrees"))
-CHUNKS_DIR        = Path(os.environ.get("ZK_CHUNKS_DIR",          "../data/chunks"))
+MERKLE_TREES_DIR  = Path(os.environ.get("ZK_MERKLE_TREES_DIR",  "./data/merkleTrees"))
+CHUNKS_DIR        = Path(os.environ.get("ZK_CHUNKS_DIR",          "./data/chunks"))
 PROOFS_TMP_DIR    = Path(os.environ.get("ZK_PROOFS_TMP_DIR",     "/tmp/zk_proofs"))
-PROOFS_DIR        = Path(os.environ.get("ZK_PROOFS_DIR",          "../data/zk_proofs"))
-LOG_DIR           = Path(os.environ.get("ZK_LOG_DIR",             "../data/logs"))
-REGISTRY_PATH     = Path(os.environ.get("ZK_REGISTRY_PATH",      "../data/registry.json"))
+PROOFS_DIR        = Path(os.environ.get("ZK_PROOFS_DIR",          "./data/zk_proofs"))
+LOG_DIR           = Path(os.environ.get("ZK_LOG_DIR",             ".../data/logs"))
+REGISTRY_PATH     = Path(os.environ.get("ZK_REGISTRY_PATH",      "./data/registry.json"))
 
 PROOFS_TMP_DIR.mkdir(parents=True, exist_ok=True)
 PROOFS_DIR.mkdir(parents=True, exist_ok=True)
@@ -762,7 +762,7 @@ def poll_zkverify_job(job_id: str, poll_interval: int = 10, max_wait: int = 300)
 
 # ── Emit tx lookup ────────────────────────────────────────────────────────────
 
-REGISTRY_PATH = Path("../data/registry.json")
+REGISTRY_PATH = Path("./data/registry.json")
 
 # Contract address on Sepolia (from SECTION-zk-circuit-02-implementation.md)
 DEFAULT_CONTRACT = "0x17A6E8AE3f6eb315F4C117630F3AaC8865BD2B15"

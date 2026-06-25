@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Allow: /catalog.html
+Allow: /llms.txt
+Allow: /registry.json
+Disallow: /api/
+Disallow: /images/
+Sitemap: https://militarymanuals.ai/sitemap.xml

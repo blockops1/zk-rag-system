@@ -2,7 +2,7 @@
 """
 batch_ingest_branch.py — Pipeline A: fitz-only extraction for all 572 docs.
 
-Reads ../data/registry.json, processes all docs with status=ok,
+Reads ./data/registry.json, processes all docs with status=ok,
 writes page JSONs to extracted/{doc_id}/pages/ and images to images/{doc_id}/,
 then updates registry status: ok → extracted.
 
@@ -23,11 +23,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from pdf_processing import ingest_pdf
 
 # ─── Config ───────────────────────────────────────────────────────────────
-REGISTRY_PATH = Path("../data/registry.json")
-SOURCE_PDFS   = Path("../data/sourcePDF")
-EXTRACTED_DIR = Path("../data/extracted")
-IMAGES_DIR    = Path("../data/images")
-DONE_LOG      = Path("../data/pipeline_a_done.json")
+REGISTRY_PATH = Path("./data/registry.json")
+SOURCE_PDFS   = Path("./data/sourcePDF")
+EXTRACTED_DIR = Path("./data/extracted")
+IMAGES_DIR    = Path("./data/images")
+DONE_LOG      = Path("./data/pipeline_a_done.json")
 LOG_DIR       = Path("./logs")
 LOG_FILE      = LOG_DIR / f"pipeline_a_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 

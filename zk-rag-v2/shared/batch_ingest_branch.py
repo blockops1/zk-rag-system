@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Branch-aware batch ingest for ZK-RAG.
-Reads PDFs from ../data/sourcePDF/{branch}/,
+Branch-aware batch ingest for Military Docs RAG.
+Reads PDFs from ./data/sourcePDF/{branch}/,
 looks up metadata from unified-registry.json, and ingests into
 per-branch Qdrant collections (army, navy, marines, coastguard, joint, other).
 """
@@ -60,14 +60,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "harvester"))
 from check_duplicate import check_duplicate  # noqa: E402
 
 # ── Config ────────────────────────────────────────────────────────
-UPLOADS_DIR      = Path("../data/sourcePDF")
-REGISTRY_FILE    = Path("../data/registry.json")
-V2_REGISTRY_PATH = Path("../data/registry.json")
+UPLOADS_DIR      = Path("./data/sourcePDF")
+REGISTRY_FILE    = Path("./data/registry.json")
+V2_REGISTRY_PATH = Path("./data/registry.json")
 RAG_API          = "http://127.0.0.1:8100"
-DONE_LOG         = Path("../data/batch_ingest_branch_done.json")
-EXTRACTION_QUEUE = Path("../data/extraction_queue.json")
-EXTRACTION_DONE  = Path("../data/extraction_queue_done.json")
-FAILED_RETRY_LOG = Path("../data/ingest_failed_retry.log")
+DONE_LOG         = Path("./data/batch_ingest_branch_done.json")
+EXTRACTION_QUEUE = Path("./data/extraction_queue.json")
+EXTRACTION_DONE  = Path("./data/extraction_queue_done.json")
+FAILED_RETRY_LOG = Path("./data/ingest_failed_retry.log")
 
 # ── Logging ───────────────────────────────────────────────────────
 from _log import get_logger  # noqa: E402
@@ -239,8 +239,8 @@ def extract_one(pdf_path, metadata, timeout=3600):
     raw_doc_id = metadata.get("doc_id", Path(pdf_path).stem.lower())
     doc_id = "".join(c.lower() if c.isalnum() or c == "-" else "-" for c in raw_doc_id).strip("-")
     branch = metadata.get("branch", "other")
-    out_dir = Path("../data/extracted") / doc_id
-    images_base_dir = Path("../data/images")
+    out_dir = Path("./data/extracted") / doc_id
+    images_base_dir = Path("./data/images")
 
     try:
         page_count, needs_docling = ingest_pdf(
@@ -426,7 +426,7 @@ def remove_from_failed_retry(doc_id):
 def run_docling_direct(pdf_path: Path, timeout: int = 7200) -> tuple[str, int]:
     """Run docling directly as a subprocess. Returns (text, page_count).
     Writes sentinel files so the result can be detected even on timeout."""
-    docling_py = "./.venv-docling/bin/python3"
+    docling_py = "./venv-docling/bin/python3"
     out_txt = "/tmp/_docling_out.txt"
     page_txt = "/tmp/_docling_pages.txt"
     done_sentinel = "/tmp/_docling_done.txt"
@@ -500,7 +500,7 @@ def write_docling_pages(doc_id: str, branch: str, pdf_path: Path) -> dict:
     except Exception as e:
         return {"status": "error", "doc_id": doc_id, "detail": str(e)}
 
-    out_dir = Path("../data/extracted") / doc_id
+    out_dir = Path("./data/extracted") / doc_id
     pages_dir = out_dir / "pages"
     pages_dir.mkdir(parents=True, exist_ok=True)
 
@@ -597,7 +597,7 @@ def reindex_one(doc_id, branch, timeout=3600):
 
 # ── Main ──────────────────────────────────────────────────────────
 def main():
-    parser = argparse.ArgumentParser(description="Branch-aware batch ingest")
+    parser = argparse.ArgumentParser(description="Branch-aware military docs batch ingest")
     parser.add_argument("limit", nargs="?", default="all")
     parser.add_argument("--pass", dest="pass_num", type=int, default=1)
     parser.add_argument("--retry-failed", action="store_true",

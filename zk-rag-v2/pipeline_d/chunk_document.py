@@ -7,7 +7,7 @@ to split page JSONs into hierarchical, semantically coherent chunks suitable for
 embedding and vector search.
 
 Usage:
-    python chunk_document.py --doc-id <doc_id> [--chunk-size 512] [--overlap 100] [--out-dir ../data/chunks]
+    python chunk_document.py --doc-id <doc_id> [--chunk-size 512] [--overlap 100] [--out-dir ./data/chunks]
 """
 
 import argparse
@@ -25,8 +25,9 @@ from llama_index.core.schema import Document
 CHUNK_SIZE    = 512
 CHUNK_OVERLAP = 20   # HierarchicalNodeParser uses its own overlap; this is a placeholder
 
-INGESTED_BASE   = Path("../data/extracted")
-DEFAULT_OUT_DIR = Path("../data/chunks")
+INGESTED_BASE   = Path("./data/extracted")
+VISION_BASE     = Path("./data/extractedVision")
+DEFAULT_OUT_DIR = Path("./data/chunks")
 
 MIN_CHUNK_CHARS = 50
 
@@ -48,7 +49,7 @@ def _chunk_document(
     Args:
         source_dir: Path to document directory (contains manifest.json + pages/)
         doc_id: Document ID (used for output path)
-        out_dir: Output parent directory (default: ../data/chunks)
+        out_dir: Output parent directory (default: ./data/chunks)
         chunk_size: Target chunk size in characters (passed to semantic splitter)
 
     Returns:
@@ -134,7 +135,8 @@ def _chunk_document(
                 return refs[0]
         return None
 
-    
+    source_label = "extractedVision" if "extractedVision" in str(source_dir) else "extracted"
+
     # Write chunks
     chunks_path = out_doc_dir / "chunks.jsonl"
     chunk_ids: list[str] = []
@@ -203,7 +205,7 @@ def main():
     parser.add_argument(
         "--doc-id",
         required=True,
-        help="Document ID (directory name in ../data/extracted/)",
+        help="Document ID (directory name in ingested-vision/)",
     )
     parser.add_argument(
         "--chunk-size",
@@ -226,15 +228,23 @@ def main():
 
     doc_id = args.doc_id
 
-    # Pick source: use extracted/{doc_id}/
+    # Pick source: prefer extractedVision over extracted (same logic as pipeline_d.py)
+    vision_dir    = VISION_BASE   / doc_id
     plain_dir    = INGESTED_BASE / doc_id
 
-    if not plain_dir.exists():
-        print(f"ERROR: No extracted directory found for doc_id={doc_id}", file=sys.stderr)
+    if not plain_dir.exists() and not vision_dir.exists():
+        print(f"ERROR: No extracted or extractedVision directory found for doc_id={doc_id}", file=sys.stderr)
         sys.exit(1)
 
-    source_dir    = plain_dir
-    source_label  = "extracted"
+    source_dir    = None
+    source_label  = None
+
+    if vision_dir.exists():
+        source_dir, source_label = vision_dir, "extractedVision"
+    elif plain_dir.exists():
+        source_dir, source_label = plain_dir, "extracted"
+    else:
+        source_dir, source_label = vision_dir, "extractedVision"
 
     if args.dry_run:
         page_count = len(list((source_dir / "pages").glob("*.json")))

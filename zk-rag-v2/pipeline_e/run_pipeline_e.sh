@@ -56,8 +56,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-CHUNKS_DIR="../data/chunks"
-OUT_DIR="../data/merkleTrees"
+CHUNKS_DIR="./data/chunks"
+OUT_DIR="./data/merkleTrees"
 
 if [[ "$BATCH_MODE" == "true" ]]; then
     echo "=== Pipeline E (batch mode) ==="
@@ -75,7 +75,7 @@ if [[ "$BATCH_MODE" == "true" ]]; then
     echo ""
     echo "=== Updating registry for batch ==="
     grep "Wrote" /tmp/pipeline_e_batch.log | while read -r line; do
-        # Extract doc_id from path like "../data/merkleTrees/<doc_id>_tree.json"
+        # Extract doc_id from path like "./data/merkleTrees/<doc_id>_tree.json"
         DOC_ID_FROM_LINE=$(echo "$line" | grep -oP '(?<=/)\w{64}(?=_tree\.json)')
         if [[ -n "$DOC_ID_FROM_LINE" ]]; then
             python3 "$UPDATE_REG" "$DOC_ID_FROM_LINE" || true

@@ -1,7 +1,7 @@
 #!/bin/bash
 # run_pipeline_c.sh — Pipeline C: SmolVLM2 vision description with stale-lock recovery
 #
-# Lock: ../data/.lock.pipeline_c
+# Lock: ./data/.lock.pipeline_c
 #   - Non-blocking flock — fails immediately if another instance is running
 #   - On stale lock → remove and retry once
 #
@@ -10,16 +10,16 @@
 #   Next ingest pass picks them up automatically.
 #
 # Prerequisites: none (CPU-only, llama-mtmd-cli + model must exist)
-# Entry: docs in ../data/extracted/ with figure_only=true pages
+# Entry: docs in ./data/extracted/ with figure_only=true pages
 # Exit: sends Telegram summary
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOCK_FILE="../data/.lock.pipeline_c"
+LOCK_FILE="./data/.lock.pipeline_c"
 VENV_PY="./venv/bin/python3"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-LOG_DIR="../data/logs"
+LOG_DIR=".../data/logs"
 STRUCTURED_LOG="${LOG_DIR}/pipeline_c_${TIMESTAMP}.jsonl"
 mkdir -p "$LOG_DIR"
 
@@ -83,7 +83,7 @@ acquire_lock || exit 1
 trap cleanup_lock EXIT
 
 log "INFO" "Pipeline C start — SmolVLM2 vision description"
-log "INFO" "Output: ../data/extracted/{doc_id}/pages/*.json"
+log "INFO" "Output: ./data/extracted/{doc_id}/pages/*.json"
 
 $VENV_PY "$SCRIPT_DIR/batch_image_describe.py" --resume >> "$STRUCTURED_LOG" 2>&1
 EXIT=$?
@@ -91,7 +91,7 @@ EXIT=$?
 DESCRIBED=$(python3 -c "
 import json, pathlib
 count = 0
-for doc_dir in pathlib.Path('../data/extracted').iterdir():
+for doc_dir in pathlib.Path('./data/extracted').iterdir():
     if not doc_dir.is_dir(): continue
     for page_file in (doc_dir / 'pages').glob('*.json'):
         try:

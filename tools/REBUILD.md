@@ -54,7 +54,7 @@ data/
 | Original (private) | Replacement (public) | Notes |
 |---|---|---|
 | `/home/<USER>/` | removed, or `./` | Never hardcode home paths |
-| `/data/military-documents/` | `./data/` | Data directory root |
+| `./data/` | `./data/` | Data directory root |
 | `source_pdfs/` | `sourcePDF/` | Canonical name |
 | `merkle_trees/` | `merkleTrees/` | Canonical name |
 | `extracted-vision/` | **removed** | No longer used |
@@ -131,7 +131,7 @@ The scanner (`tools/scan_leaks.py`) self-flags on its own `LEAK_PATTERNS` defini
 ### Leak Patterns Scanned
 
 - `/home/<username>/` — real home directory paths
-- `/data/military-documents/` — private data directory
+- `./data/` — private data directory
 - `source_pdfs/` — old directory name
 - `merkle_trees/` — old directory name
 - `extracted-vision/` — removed feature

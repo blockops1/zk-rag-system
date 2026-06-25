@@ -48,8 +48,8 @@ from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
-REGISTRY_PATH = Path("../data/registry.json")
-LOG_DIR       = Path("../data/logs")
+REGISTRY_PATH = Path("./data/registry.json")
+LOG_DIR       = Path(".../data/logs")
 SCRIPT_DIR     = Path(__file__).parent
 
 # ── RPC config ────────────────────────────────────────────────────────────────

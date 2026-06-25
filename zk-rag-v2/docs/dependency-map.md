@@ -26,7 +26,7 @@
 
 ## Archived Files
 
-All archived to `.<DATA>/archive/2026-04-25-orphans/` (not in git).
+All archived to `./data/archive/2026-04-25-orphans/` (not in git).
 
 ### Pipeline A
 - `pipeline_a/ingest_pdf.py` — superseded by `batch_ingest_branch.py`
@@ -95,10 +95,10 @@ The following API features support doc-scoped provenance search:
 
 ## Key Paths
 
-- Registry: `.<DATA>/registry.json`
-- Merkle trees: `.<DATA>/merkleTrees/`
-- Chunks: `.<DATA>/chunks/`
-- Embeddings: `.<DATA>/embeddings/`
-- Source PDFs: `.<DATA>/sourcePDF/`
-- Archive: `.<DATA>/archive/`
-- Qdrant: `.<DATA>/qdrant/`
+- Registry: `./data/registry.json`
+- Merkle trees: `./data/merkleTrees/`
+- Chunks: `./data/chunks/`
+- Embeddings: `./data/embeddings/`
+- Source PDFs: `./data/sourcePDF/`
+- Archive: `./data/archive/`
+- Qdrant: `./data/qdrant/`

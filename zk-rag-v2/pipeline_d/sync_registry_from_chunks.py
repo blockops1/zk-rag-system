@@ -2,8 +2,8 @@
 """
 sync_registry_from_chunks.py -- Sync the central registry from per-doc chunk data.
 
-Reads every ../data/chunks/{doc_id}/chunks.jsonl and updates
-the corresponding entry in ../data/registry.json.
+Reads every ./data/chunks/{doc_id}/chunks.jsonl and updates
+the corresponding entry in ./data/registry.json.
 
 D1 (chunk_document.py) outputs chunks.jsonl + chunk_ids.json but no metadata.json.
 This script counts lines in chunks.jsonl to get chunk_count.
@@ -18,8 +18,8 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-CHUNKS_DIR = Path("../data/chunks")
-REGISTRY_PATH = Path("../data/registry.json")
+CHUNKS_DIR = Path("./data/chunks")
+REGISTRY_PATH = Path("./data/registry.json")
 BACKUP_SUFFIX = f".backup-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
 
 

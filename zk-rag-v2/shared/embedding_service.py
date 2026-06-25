@@ -8,12 +8,6 @@ for concurrent encode requests.
 Runs on port 8200.
 """
 
-import os
-
-# Force offline mode — prevents retry loops when HuggingFace returns 429.
-# The model is pre-cached at ~/.cache/huggingface/hub/ on both R730 and VPS.
-os.environ["HF_HUB_OFFLINE"] = "1"
-
 import logging
 import logging.handlers
 import os
@@ -29,7 +23,7 @@ from sentence_transformers import SentenceTransformer
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
-LOG_DIR = "../data/logs"
+LOG_DIR = ".../data/logs"
 LOG_FILE = f"{LOG_DIR}/embedding_service.log"
 os.makedirs(LOG_DIR, exist_ok=True)
 

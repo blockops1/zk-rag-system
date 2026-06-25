@@ -1,0 +1,428 @@
+#!/usr/bin/env python3
+"""
+Test script: generate a ZK proof for a real document chunk.
+
+This script:
+1. Picks a document with chunk data
+2. Picks a random chunk from it
+3. Computes Poseidon hashes of all chunks (matching the circuit's hashing scheme)
+4. Builds a Merkle tree from the chunk hashes
+5. Extracts the Merkle proof for the chosen chunk
+6. Calls the `prove` binary with the correct inputs
+7. Verifies the proof
+
+Usage:
+    python3 test_zk_proof_from_chunks.py [--doc-id <id>] [--chunk-index <n>]
+
+Environment:
+    PROVE_BIN   Path to the prove binary (default: target/debug/prove-bin)
+    RUST_LOG    Log level (default: info)
+"""
+import argparse
+import base64
+import hashlib
+import json
+import os
+import random
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+# ─── Poseidon hash in Python (matching plonky2's PoseidonHash) ────────────────
+# We use the py_horncap library or a pure-Python implementation.
+# If py_horncap is unavailable, we fall back to SHA-256 for the test
+# but note the mismatch.
+
+try:
+    from py_horncap import Poseidon
+    HAS_POSEIDON = True
+except ImportError:
+    HAS_POSEIDON = False
+    print("[WARN] py_horncap not available, using SHA-256 as fallback hash", file=sys.stderr)
+
+# ─── Paths ────────────────────────────────────────────────────────────────────
+
+ZK_CIRCUIT_ROOT = Path("./zk-circuit")
+CHUNKS_DIR = Path("./data/chunks")
+PROVE_BIN = os.environ.get("PROVE_BIN", str(ZK_CIRCUIT_ROOT / "target" / "release" / "prove-bin"))
+
+# Goldilocks field prime
+GOLDILOCKS_P = 2**64 + 2**32 + 1
+
+# ─── Hashing ─────────────────────────────────────────────────────────────────
+
+def goldilocks_field_from_bytesLE(byte_data: bytes) -> int:
+    """Convert little-endian bytes to a Goldilocks field element (mod P)."""
+    val = int.from_bytes(byte_data[:8], "little")
+    return val % GOLDILOCKS_P
+
+def goldilocks_field_to_hex(elem: int) -> str:
+    """Encode a field element as a 32-byte big-endian hex string (0x...)."""
+    return "0x" + hex(elem % GOLDILOCKS_P).lstrip("0x").zfill(16)
+
+def sha256_bytes(data: bytes) -> bytes:
+    return hashlib.sha256(data).digest()
+
+def poseidon_hash_bytes(data: bytes) -> str:
+    """
+    Compute Poseidon hash of bytes, returning a hex string (0x...).
+    Matches plonky2's PoseidonHash::hash_or_noop on a single field element.
+    """
+    if not HAS_POSEIDON:
+        # Fallback to SHA-256 (not correct for circuit, but lets us run the test)
+        h = sha256_bytes(data)
+        return "0x" + h.hex()
+
+    # py_horncap: hash a single field element (the bytes as a LE u64)
+    elem0 = goldilocks_field_from_bytesLE(data[:8])
+    h = Poseidon.hash_felts([elem0])
+    return goldilocks_field_to_hex(h)
+
+def poseidon_hash_vec(elems: list[int]) -> str:
+    """
+    Compute Poseidon hash of a vector of field elements, returning a hex string.
+    Matches plonky2's PoseidonHash::hash_n_to_hash_no_pad for multiple elements.
+    """
+    if not HAS_POSEIDON:
+        data = b"".join(e.to_bytes(8, "little") for e in elems)
+        h = sha256_bytes(data)
+        return "0x" + h.hex()
+
+    h = Poseidon.hash_felts(elems)
+    return goldilocks_field_to_hex(h)
+
+def poseidon_two_to_one(left: str, right: str) -> str:
+    """
+    Compute Poseidon hash of two HashOut values (left, right).
+    Returns hex string (0x...).
+    """
+    if not HAS_POSEIDON:
+        combined = left + right
+        h = sha256_bytes(bytes.fromhex(combined.lstrip("0x")))
+        return "0x" + h.hex()
+
+    def hex_to_felt(hex_str: str) -> int:
+        b = bytes.fromhex(hex_str.lstrip("0x"))
+        return int.from_bytes(b[:8], "little") % GOLDILOCKS_P
+
+    l = hex_to_felt(left)
+    r = hex_to_felt(right)
+    h = Poseidon.hash_felts([l, r])
+    return goldilocks_field_to_hex(h)
+
+# ─── Merkle Tree ─────────────────────────────────────────────────────────────
+
+class MerkleTree:
+    """
+    Binary Merkle tree built from Poseidon hashes of chunks.
+    Matches the structure expected by the ZK circuit.
+    """
+
+    def __init__(self, leaf_hashes: list[str]):
+        self.depth = self._log2_strict(len(leaf_hashes))
+        self.leaves = leaf_hashes
+
+        level = leaf_hashes[:]
+        self.levels = [level]
+
+        for _ in range(self.depth):
+            next_level = []
+            for i in range(0, len(level), 2):
+                if i + 1 < len(level):
+                    h = poseidon_two_to_one(level[i], level[i + 1])
+                else:
+                    # Pad with zero hash (shouldn't happen for power-of-2)
+                    h = level[i]
+                next_level.append(h)
+            self.levels.append(next_level)
+            level = next_level
+
+        self.root = level[0]
+
+    @staticmethod
+    def _log2_strict(n: int) -> int:
+        if n == 0 or (n & (n - 1)) != 0:
+            raise ValueError(f"n must be a power of 2, got {n}")
+        return n.bit_length() - 1
+
+    def get_proof(self, leaf_index: int) -> dict:
+        """Return siblings for a leaf, bottom-up."""
+        if leaf_index < 0 or leaf_index >= len(self.leaves):
+            raise IndexError(f"leaf_index {leaf_index} out of range")
+
+        siblings = []
+        idx = leaf_index
+        for level_idx in range(self.depth):
+            level = self.levels[level_idx]
+            # sibling index: if idx is even, sibling is idx+1; if odd, sibling is idx-1
+            if idx % 2 == 0:
+                sib_idx = idx + 1 if idx + 1 < len(level) else idx
+            else:
+                sib_idx = idx - 1
+            siblings.append(level[sib_idx])
+            idx //= 2
+
+        return {
+            "root": self.root,
+            "siblings": siblings,
+        }
+
+    def verify_proof(self, leaf_hash: str, leaf_index: int) -> bool:
+        """Verify a proof against this tree's root."""
+        proof = self.get_proof(leaf_index)
+        current = leaf_hash
+        idx = leaf_index
+        for i, sib in enumerate(proof["siblings"]):
+            if idx % 2 == 0:
+                current = poseidon_two_to_one(current, sib)
+            else:
+                current = poseidon_two_to_one(sib, current)
+            idx //= 2
+        return current == self.root
+
+# ─── Chunk Loading ───────────────────────────────────────────────────────────
+
+def load_doc_chunks(doc_id: str) -> list[dict]:
+    """Load chunks.jsonl for a document."""
+    chunks_file = CHUNKS_DIR / doc_id / "chunks.jsonl"
+    if not chunks_file.exists():
+        raise FileNotFoundError(f"Chunks not found: {chunks_file}")
+
+    chunks = []
+    with open(chunks_file) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                chunks.append(json.loads(line))
+    return chunks
+
+def chunk_to_poseidon_hash(chunk_text: str) -> str:
+    """
+    Convert chunk text to a Poseidon hash.
+    The circuit uses PoseidonHash::hash_or_noop on each chunk.
+    Each chunk is a string — we hash the UTF-8 bytes.
+    """
+    return poseidon_hash_bytes(chunk_text.encode("utf-8"))
+
+# ─── Prove Input Generation ───────────────────────────────────────────────────
+
+def build_prove_input(doc_id: str, chunk_index: int, tree_depth: int) -> dict:
+    """
+    Build the JSON input for the prove binary given a doc_id and chunk_index.
+    """
+    chunks = load_doc_chunks(doc_id)
+
+    if chunk_index < 0 or chunk_index >= len(chunks):
+        raise IndexError(f"chunk_index {chunk_index} out of range [0, {len(chunks)-1}]")
+
+    print(f"  Loading {len(chunks)} chunks for doc {doc_id} ...")
+    print(f"  Hashing all chunks with Poseidon ...")
+
+    # Hash all chunks
+    leaf_hashes = [chunk_to_poseidon_hash(c["text"]) for c in chunks]
+
+    # Pad to power of 2
+    n = len(leaf_hashes)
+    next_pow2 = 1 << (n - 1).bit_length()
+    if next_pow2 != n:
+        zero_hash = "0x" + "00" * 32
+        leaf_hashes.extend([zero_hash] * (next_pow2 - n))
+        print(f"  Padded from {n} to {next_pow2} leaves")
+
+    # Build Merkle tree
+    print(f"  Building Merkle tree (depth={self._log2_strict(next_pow2)}) ...")
+    tree = MerkleTree(leaf_hashes)
+
+    # Get proof for the target chunk
+    proof_data = tree.get_proof(chunk_index)
+
+    # The leaf hash (Poseidon hash of chunk text)
+    leaf_hash = leaf_hashes[chunk_index] if chunk_index < n else leaf_hashes[0]
+
+    # Build prove input (matching the circuit's public inputs)
+    prove_input = {
+        "leaf_hash": leaf_hash,
+        "merkle_root": tree.root,
+        "leaf_index": chunk_index,
+        "depth": tree.depth,
+        "siblings": proof_data["siblings"],
+    }
+
+    return prove_input, tree, leaf_hash, chunks[chunk_index] if chunk_index < n else None
+
+# ─── Subprocess call to prove binary ────────────────────────────────────────
+
+def run_prove_binary(prove_input: dict, log_file: str | None = None) -> dict:
+    """Call the prove binary and return the parsed JSON output."""
+    prove_bin = Path(PROVE_BIN)
+    if not prove_bin.exists():
+        raise FileNotFoundError(
+            f"prove binary not found at {prove_bin}\n"
+            f"Build it with: cd {ZK_CIRCUIT_ROOT} && cargo build -p prove-bin"
+        )
+
+    cmd = [str(prove_bin)]
+    if log_file:
+        cmd.extend(["--log-file", log_file])
+
+    cmd.append("/dev/stdin")
+
+    print(f"  Calling prove binary: {' '.join(cmd[:-1])} <stdin>")
+
+    env = os.environ.copy()
+    env["RUST_LOG"] = env.get("RUST_LOG", "info")
+    env["CIRCUIT_DIR"] = "./zk-circuit"
+
+    result = subprocess.run(
+        cmd,
+        input=json.dumps(prove_input),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    if result.returncode != 0:
+        print(f"[ERROR] prove binary failed (exit {result.returncode})", file=sys.stderr)
+        print(f"  stdout: {result.stdout}", file=sys.stderr)
+        print(f"  stderr: {result.stderr}", file=sys.stderr)
+        raise RuntimeError(f"prove binary failed: {result.stderr}")
+
+    if result.stderr:
+        # Print structured logs from stderr so user sees them
+        for line in result.stderr.strip().splitlines():
+            print(f"    [log] {line}", file=sys.stderr)
+
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        print(f"[ERROR] Failed to parse proof JSON: {e}", file=sys.stderr)
+        print(f"  stdout: {result.stdout}", file=sys.stderr)
+        raise
+
+# ─── Main ────────────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(description="Generate a ZK proof for a real document chunk")
+    parser.add_argument("--doc-id", type=str, default=None,
+                        help="Document ID (default: pick random from chunks/)")
+    parser.add_argument("--chunk-index", type=int, default=None,
+                        help="Chunk index (default: random)")
+    parser.add_argument("--log-file", type=str, default=None,
+                        help="Optional path for JSONL audit log")
+    args = parser.parse_args()
+
+    # Pick a document
+    available_docs = sorted([d.name for d in CHUNKS_DIR.iterdir() if d.is_dir()])
+    if not available_docs:
+        print(f"[ERROR] No documents found in {CHUNKS_DIR}", file=sys.stderr)
+        sys.exit(1)
+
+    doc_id = args.doc_id
+    if doc_id is None:
+        doc_id = random.choice(available_docs)
+    elif doc_id not in available_docs:
+        print(f"[ERROR] Document {doc_id} not found in {CHUNKS_DIR}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"\n{'='*60}")
+    print(f"ZK Proof Test — doc: {doc_id}")
+    print(f"{'='*60}\n")
+
+    # Load chunks
+    chunks = load_doc_chunks(doc_id)
+    n_chunks = len(chunks)
+    print(f"Document: {doc_id}")
+    print(f"Total chunks: {n_chunks}")
+    print(f"Title: {chunks[0]['text'][:80].strip()!r}")
+
+    # Pick chunk
+    chunk_index = args.chunk_index
+    if chunk_index is None:
+        chunk_index = random.randint(0, n_chunks - 1)
+    elif chunk_index < 0 or chunk_index >= n_chunks:
+        print(f"[ERROR] chunk_index {chunk_index} out of range [0, {n_chunks-1}]", file=sys.stderr)
+        sys.exit(1)
+
+    chunk = chunks[chunk_index]
+    print(f"\nPicked chunk {chunk_index}:")
+    print(f"  chunk_id: {chunk['chunk_id']}")
+    preview = chunk["text"].replace('\n', ' ')[:120].strip()
+    print(f"  preview:  {preview!r} ...")
+
+    # ── Build Merkle tree from all chunk hashes ────────────────────────────
+    print(f"\n[Step 1] Hashing all {n_chunks} chunks with Poseidon ...")
+    leaf_hashes = [chunk_to_poseidon_hash(c["text"]) for c in chunks]
+
+    # Pad to power of 2
+    next_pow2 = 1 << (n_chunks - 1).bit_length()
+    if next_pow2 != n_chunks:
+        zero_hash = "0x" + "00" * 32
+        leaf_hashes.extend([zero_hash] * (next_pow2 - n_chunks))
+        print(f"  Padded {n_chunks} → {next_pow2} leaves (power of 2)")
+
+    depth = (next_pow2 - 1).bit_length()
+    print(f"  Tree depth: {depth}")
+
+    print(f"[Step 2] Building Merkle tree ...")
+    tree = MerkleTree(leaf_hashes)
+    print(f"  Merkle root: {tree.root}")
+
+    # Verify proof locally first
+    leaf_hash = leaf_hashes[chunk_index]
+    print(f"[Step 3] Verifying Merkle proof locally ...")
+    ok = tree.verify_proof(leaf_hash, chunk_index)
+    print(f"  Proof valid: {ok}")
+    if not ok:
+        print("[ERROR] Local Merkle proof verification failed!", file=sys.stderr)
+        sys.exit(1)
+
+    # ── Build prove input ─────────────────────────────────────────────────
+    siblings = tree.get_proof(chunk_index)["siblings"]
+
+    prove_input = {
+        "leaf_hash": leaf_hash,
+        "merkle_root": tree.root,
+        "leaf_index": chunk_index,
+        "depth": depth,
+        "siblings": siblings,
+    }
+
+    print(f"\n[Step 4] Calling prove binary ...")
+    print(f"  depth:       {depth}")
+    print(f"  leaf_index:  {chunk_index}")
+    print(f"  leaf_hash:   {leaf_hash[:40]}...")
+    print(f"  merkle_root: {tree.root[:40]}...")
+    print(f"  siblings:    {len(siblings)} hashes")
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump(prove_input, f)
+        input_file = f.name
+
+    try:
+        output = run_prove_binary(prove_input, log_file=args.log_file)
+    finally:
+        os.unlink(input_file)
+
+    # ── Report ────────────────────────────────────────────────────────────
+    print(f"\n{'='*60}")
+    print(f"ZK PROOF GENERATED SUCCESSFULLY")
+    print(f"{'='*60}")
+    print(f"  proof_b64 length:        {len(output.get('proof_b64', ''))}")
+    print(f"  public_inputs.leaf_hash: {output.get('public_inputs', {}).get('leaf_hash', 'N/A')[:40]}...")
+    print(f"  public_inputs.merkle_root: {output.get('public_inputs', {}).get('merkle_root', 'N/A')[:40]}...")
+    print(f"  common_circuit_data_b64: {len(output.get('common_circuit_data_b64', ''))} chars")
+    print(f"  verifier_only_b64:       {len(output.get('verifier_only_b64', ''))} chars")
+
+    # ── Save output ───────────────────────────────────────────────────────
+    output_file = Path(f"/tmp/zk_proof_{doc_id}_{chunk_index}.json")
+    with open(output_file, "w") as f:
+        json.dump(output, f, indent=2)
+    print(f"\n  Full output saved to: {output_file}")
+
+    print(f"\n[DONE] ZK proof generated for chunk {chunk_index} of document {doc_id}")
+    return output
+
+
+if __name__ == "__main__":
+    main()

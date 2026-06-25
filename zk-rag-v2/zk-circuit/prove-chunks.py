@@ -9,10 +9,10 @@ Example:
     python3 prove-chunks.py 00c8a75d605f10359503c9a25fa1255f8a8946e0dd9026646bf69750639b4669 40
 
 Input data layout (per doc_id):
-    ../data/chunks/<doc_id>/
+    ./data/chunks/<doc_id>/
         chunks.jsonl      — one JSON per line: {"chunk_id", "doc_id", "text"}
         chunk_ids.json    — list of chunk_id strings, index N = chunk N
-    ../data/merkleTrees/<doc_id>_tree.json
+    ./data/merkleTrees/<doc_id>_tree.json
         merkle_root, leaf_hashes, paths{<chunk_index>: {leaf_hash, siblings, leaf_index}}
 
 Outputs:
@@ -32,9 +32,9 @@ from qdrant_client import QdrantClient
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
-CHUNKS_DIR = Path("../data/chunks")
-MERKLE_TREES_DIR = Path("../data/merkleTrees")
-ZK_PROOFS_DIR = Path("../data/zk_proofs")
+CHUNKS_DIR = Path("./data/chunks")
+MERKLE_TREES_DIR = Path("./data/merkleTrees")
+ZK_PROOFS_DIR = Path("./data/zk_proofs")
 DEFAULT_PROVE_BIN = Path("./zk-circuit/target/release/prove-bin")
 LOG_DIR = ZK_PROOFS_DIR  # logs live alongside outputs for discoverability
 LOG_FILE = LOG_DIR / "prove-chunks.log"
